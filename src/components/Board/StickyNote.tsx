@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Group, Rect, Text, Transformer } from 'react-konva';
+import { Html } from 'react-konva-utils';
 import { Note, Position } from '../../types/board';
 
 interface StickyNoteProps extends Note {
@@ -12,6 +13,7 @@ interface StickyNoteProps extends Note {
 }
 
 const StickyNote: React.FC<StickyNoteProps> = ({
+  id,
   content,
   position,
   color,
@@ -23,8 +25,10 @@ const StickyNote: React.FC<StickyNoteProps> = ({
   stageScale,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
-  const shapeRef = React.useRef(null);
-  const trRef = React.useRef(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const shapeRef = useRef(null);
+  const trRef = useRef(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const colorMap = {
     yellow: '#fff9c4',
@@ -39,6 +43,13 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       trRef.current.getLayer().batchDraw();
     }
   }, [isSelected]);
+
+  React.useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.select();
+    }
+  }, [isEditing]);
 
   const width = 150;
   const height = 150;
@@ -55,6 +66,25 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       y: e.target.y(),
     };
     onDragEnd?.(newPosition);
+  };
+
+  const handleTextDblClick = () => {
+    setIsEditing(true);
+  };
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      setIsEditing(false);
+      onChange?.({ content: e.currentTarget.value });
+    }
+    if (e.key === 'Escape') {
+      setIsEditing(false);
+    }
+  };
+
+  const handleTextareaBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    setIsEditing(false);
+    onChange?.({ content: e.target.value });
   };
 
   return (
@@ -78,23 +108,71 @@ const StickyNote: React.FC<StickyNoteProps> = ({
         shadowOffset={{ x: 2, y: 2 }}
         cornerRadius={5}
       />
-      <Text
-        text={content}
-        width={width - 20}
-        height={height - 20}
-        x={10}
-        y={10}
-        fontSize={16 / stageScale}
-        fontFamily="Arial"
-        fill="#333"
-        wrap="word"
-        align="left"
-      />
-      {isSelected && (
+      {isEditing ? (
+        <Html
+          divProps={{
+            style: {
+              position: 'absolute',
+              top: '0px',
+              left: '0px',
+              width: `${width}px`,
+              height: `${height}px`,
+            },
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: '10px',
+              left: '10px',
+              width: `${width - 20}px`,
+              height: `${height - 20}px`,
+              transform: `scale(${1 / stageScale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            <textarea
+              ref={textareaRef}
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                padding: '0px',
+                margin: '0px',
+                background: colorMap[color],
+                outline: 'none',
+                resize: 'none',
+                fontSize: '16px',
+                fontFamily: 'Arial',
+                color: '#333',
+                lineHeight: '1.4',
+                overflow: 'hidden',
+              }}
+              defaultValue={content}
+              onKeyDown={handleTextareaKeyDown}
+              onBlur={handleTextareaBlur}
+            />
+          </div>
+        </Html>
+      ) : (
+        <Text
+          text={content}
+          width={width - 20}
+          height={height - 20}
+          x={10}
+          y={10}
+          fontSize={16 / stageScale}
+          fontFamily="Arial"
+          fill="#333"
+          wrap="word"
+          align="left"
+          onDblClick={handleTextDblClick}
+        />
+      )}
+      {isSelected && !isEditing && (
         <Transformer
           ref={trRef}
           boundBoxFunc={(oldBox, newBox) => {
-            // limit resize
             const minWidth = 100;
             const minHeight = 100;
             const maxWidth = 400;
