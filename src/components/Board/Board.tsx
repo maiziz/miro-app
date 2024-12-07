@@ -1,59 +1,94 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Stage, Layer, Rect, Group, Line } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { v4 as uuidv4 } from 'uuid';
 import Toolbar from './Toolbar';
 import StickyNote from './StickyNote';
 import Frame from './Frame';
-import { Note, Position, NoteColor, Frame as FrameType, FrameColor } from '../../types/board';
+import { Position, Note, Frame as FrameType, BoardState, BoardHistory, BoardAction, NoteColor, FrameColor } from '../../types/board';
 
-interface BoardState {
-  notes: Note[];
-  frames: FrameType[];
-  selectedId: string | null;
-}
+const MAX_HISTORY_LENGTH = 50;
 
 const STORAGE_KEY = 'miroboard_state';
 
 const Board: React.FC = () => {
-  const [stageSize, setStageSize] = useState({
-    width: window.innerWidth,
-    height: window.innerHeight,
-  });
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState<Position>({ x: 0, y: 0 });
-  const [boardState, setBoardState] = useState<BoardState>(() => {
-    const savedState = localStorage.getItem(STORAGE_KEY);
-    return savedState ? JSON.parse(savedState) : {
+  const [boardHistory, setBoardHistory] = useState<BoardHistory>({
+    past: [],
+    present: {
       notes: [],
       frames: [],
       selectedId: null,
-    };
+    },
+    future: [],
   });
-  const stageRef = useRef(null);
+
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
+  const stageRef = useRef(null);
+  const [stageSize, setStageSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
-  // Save state to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(boardState));
-  }, [boardState]);
+  // Shorthand for current board state
+  const boardState = boardHistory.present;
 
-  // Handle window resize
-  useEffect(() => {
-    const checkSize = () => {
-      setStageSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-
-    window.addEventListener('resize', checkSize);
-    return () => window.removeEventListener('resize', checkSize);
+  // Function to push a new state to history
+  const pushHistory = useCallback((newState: BoardState, action: BoardAction) => {
+    setBoardHistory(prev => {
+      const newPast = [...prev.past, prev.present].slice(-MAX_HISTORY_LENGTH);
+      return {
+        past: newPast,
+        present: newState,
+        future: [],
+      };
+    });
+    
+    // Log the action for debugging
+    console.log(`Action: ${action.type} - ${action.description}`);
   }, []);
 
-  // Handle keyboard shortcuts
+  // Undo function
+  const handleUndo = useCallback(() => {
+    setBoardHistory(prev => {
+      if (prev.past.length === 0) return prev;
+
+      const previous = prev.past[prev.past.length - 1];
+      const newPast = prev.past.slice(0, prev.past.length - 1);
+
+      return {
+        past: newPast,
+        present: previous,
+        future: [prev.present, ...prev.future],
+      };
+    });
+  }, []);
+
+  // Redo function
+  const handleRedo = useCallback(() => {
+    setBoardHistory(prev => {
+      if (prev.future.length === 0) return prev;
+
+      const next = prev.future[0];
+      const newFuture = prev.future.slice(1);
+
+      return {
+        past: [...prev.past, prev.present],
+        present: next,
+        future: newFuture,
+      };
+    });
+  }, []);
+
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      }
+
       if (e.target instanceof HTMLTextAreaElement) {
         return; // Don't handle shortcuts while editing text
       }
@@ -61,12 +96,19 @@ const Board: React.FC = () => {
       // Delete selected note
       if ((e.key === 'Delete' || e.key === 'Backspace') && boardState.selectedId) {
         e.preventDefault();
-        setBoardState(prev => ({
-          ...prev,
-          notes: prev.notes.filter(note => note.id !== prev.selectedId),
-          frames: prev.frames.filter(frame => frame.id !== prev.selectedId),
+        const newState = {
+          ...boardState,
+          notes: boardState.notes.filter(note => note.id !== boardState.selectedId),
+          frames: boardState.frames.filter(frame => frame.id !== boardState.selectedId),
           selectedId: null,
-        }));
+        };
+
+        pushHistory(newState, {
+          type: 'DELETE_ITEM',
+          payload: boardState.selectedId,
+          timestamp: Date.now(),
+          description: 'Deleted item',
+        });
       }
 
       // Copy selected note
@@ -98,11 +140,19 @@ const Board: React.FC = () => {
               y: (pointerPosition.y - stage.y()) / scale,
             },
           };
-          setBoardState(prev => ({
-            ...prev,
-            notes: [...prev.notes, newNote],
+
+          const newState = {
+            ...boardState,
+            notes: [...boardState.notes, newNote],
             selectedId: newNote.id,
-          }));
+          };
+
+          pushHistory(newState, {
+            type: 'ADD_NOTE',
+            payload: newNote,
+            timestamp: Date.now(),
+            description: 'Added new note',
+          });
         } else if (clipboardFrame) {
           const frame: FrameType = JSON.parse(clipboardFrame);
           const stage = stageRef.current;
@@ -115,23 +165,59 @@ const Board: React.FC = () => {
               y: (pointerPosition.y - stage.y()) / scale,
             },
           };
-          setBoardState(prev => ({
-            ...prev,
-            frames: [...prev.frames, newFrame],
+
+          const newState = {
+            ...boardState,
+            frames: [...boardState.frames, newFrame],
             selectedId: newFrame.id,
-          }));
+          };
+
+          pushHistory(newState, {
+            type: 'ADD_FRAME',
+            payload: newFrame,
+            timestamp: Date.now(),
+            description: 'Added new frame',
+          });
         }
       }
 
       // Deselect with Escape
       if (e.key === 'Escape') {
-        setBoardState(prev => ({ ...prev, selectedId: null }));
+        const newState = {
+          ...boardState,
+          selectedId: null,
+        };
+
+        pushHistory(newState, {
+          type: 'DESELECT_ITEM',
+          payload: null,
+          timestamp: Date.now(),
+          description: 'Deselected item',
+        });
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [boardState.selectedId, scale]);
+  }, [boardState.selectedId, scale, handleUndo, handleRedo]);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(boardState));
+  }, [boardState]);
+
+  // Handle window resize
+  useEffect(() => {
+    const checkSize = () => {
+      setStageSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener('resize', checkSize);
+    return () => window.removeEventListener('resize', checkSize);
+  }, []);
 
   // Handle zoom
   const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
@@ -171,38 +257,35 @@ const Board: React.FC = () => {
   };
 
   // Add sticky note
-  const addNote = (color: NoteColor = 'yellow') => {
-    const stage = stageRef.current;
-    const position = stage.getPointerPosition();
+  const addNote = (position: Position, color: NoteColor = 'yellow') => {
     const newNote: Note = {
       id: uuidv4(),
       type: 'note',
-      position: {
-        x: (position.x - stage.x()) / scale,
-        y: (position.y - stage.y()) / scale,
-      },
+      position,
       content: 'Double click to edit',
       color,
     };
 
-    setBoardState(prev => ({
-      ...prev,
-      notes: [...prev.notes, newNote],
+    const newState = {
+      ...boardState,
+      notes: [...boardState.notes, newNote],
       selectedId: newNote.id,
-    }));
+    };
+
+    pushHistory(newState, {
+      type: 'ADD_NOTE',
+      payload: newNote,
+      timestamp: Date.now(),
+      description: 'Added new note',
+    });
   };
 
   // Add frame
-  const addFrame = (color: FrameColor = 'gray') => {
-    const stage = stageRef.current;
-    const position = stage.getPointerPosition();
+  const addFrame = (position: Position, color: FrameColor = 'gray') => {
     const newFrame: FrameType = {
       id: uuidv4(),
       type: 'frame',
-      position: {
-        x: (position.x - stage.x()) / scale,
-        y: (position.y - stage.y()) / scale,
-      },
+      position,
       title: 'New Frame',
       color,
       size: {
@@ -211,11 +294,18 @@ const Board: React.FC = () => {
       },
     };
 
-    setBoardState(prev => ({
-      ...prev,
-      frames: [...(prev.frames || []), newFrame],
+    const newState = {
+      ...boardState,
+      frames: [...boardState.frames, newFrame],
       selectedId: newFrame.id,
-    }));
+    };
+
+    pushHistory(newState, {
+      type: 'ADD_FRAME',
+      payload: newFrame,
+      timestamp: Date.now(),
+      description: 'Added new frame',
+    });
   };
 
   // Handle note drag
@@ -226,26 +316,52 @@ const Board: React.FC = () => {
 
   const handleNoteDragEnd = (id: string, newPosition: Position) => {
     setIsDragging(false);
-    handleNoteChange(id, { position: newPosition });
+    const newState = {
+      ...boardState,
+      notes: boardState.notes.map(note =>
+        note.id === id ? { ...note, position: newPosition } : note
+      ),
+    };
+
+    pushHistory(newState, {
+      type: 'MOVE_ITEM',
+      payload: { id, position: newPosition },
+      timestamp: Date.now(),
+      description: 'Moved item',
+    });
   };
 
   // Update note
   const handleNoteChange = (id: string, newAttrs: Partial<Note>) => {
-    setBoardState(prev => ({
-      ...prev,
-      notes: prev.notes.map(note =>
+    const newState = {
+      ...boardState,
+      notes: boardState.notes.map(note =>
         note.id === id ? { ...note, ...newAttrs } : note
       ),
-    }));
+    };
+
+    pushHistory(newState, {
+      type: 'UPDATE_ITEM',
+      payload: { id, attrs: newAttrs },
+      timestamp: Date.now(),
+      description: 'Updated item properties',
+    });
   };
 
   // Select note
   const handleNoteSelect = (id: string) => {
     if (!isDragging) {
-      setBoardState(prev => ({
-        ...prev,
+      const newState = {
+        ...boardState,
         selectedId: id,
-      }));
+      };
+
+      pushHistory(newState, {
+        type: 'SELECT_ITEM',
+        payload: id,
+        timestamp: Date.now(),
+        description: 'Selected item',
+      });
     }
   };
 
@@ -257,27 +373,80 @@ const Board: React.FC = () => {
 
   const handleFrameDragEnd = (id: string, newPosition: Position) => {
     setIsDragging(false);
-    handleFrameChange(id, { position: newPosition });
+    
+    // Get the final state after all note movements
+    const newState = {
+      ...boardState,
+      frames: boardState.frames.map(frame =>
+        frame.id === id ? { ...frame, position: newPosition } : frame
+      ),
+    };
+
+    // Push the final state to history
+    pushHistory(newState, {
+      type: 'MOVE_FRAME_WITH_NOTES',
+      payload: { frameId: id, position: newPosition },
+      timestamp: Date.now(),
+      description: 'Moved frame with overlapping notes',
+    });
   };
 
   // Update frame
   const handleFrameChange = (id: string, newAttrs: Partial<FrameType>) => {
-    setBoardState(prev => ({
-      ...prev,
-      frames: prev.frames.map(frame =>
+    const newState = {
+      ...boardState,
+      frames: boardState.frames.map(frame =>
         frame.id === id ? { ...frame, ...newAttrs } : frame
       ),
-    }));
+    };
+
+    pushHistory(newState, {
+      type: 'UPDATE_ITEM',
+      payload: { id, attrs: newAttrs },
+      timestamp: Date.now(),
+      description: 'Updated item properties',
+    });
   };
 
   // Select frame
   const handleFrameSelect = (id: string) => {
     if (!isDragging) {
-      setBoardState(prev => ({
-        ...prev,
+      const newState = {
+        ...boardState,
         selectedId: id,
-      }));
+      };
+
+      pushHistory(newState, {
+        type: 'SELECT_ITEM',
+        payload: id,
+        timestamp: Date.now(),
+        description: 'Selected item',
+      });
     }
+  };
+
+  // Handle note movement during frame drag
+  const handleNotesMove = (noteIds: string[], offset: Position) => {
+    const newState = {
+      ...boardState,
+      notes: boardState.notes.map(note => 
+        noteIds.includes(note.id)
+          ? {
+              ...note,
+              position: {
+                x: note.position.x + offset.x,
+                y: note.position.y + offset.y,
+              },
+            }
+          : note
+      ),
+    };
+
+    // Update state without pushing to history during drag
+    setBoardHistory(prev => ({
+      ...prev,
+      present: newState,
+    }));
   };
 
   // Grid properties
@@ -301,37 +470,36 @@ const Board: React.FC = () => {
     }
   });
 
-  const handleNotesMove = (noteIds: string[], offset: Position) => {
-    setBoardState(prev => ({
-      ...prev,
-      notes: prev.notes.map(note => 
-        noteIds.includes(note.id)
-          ? {
-              ...note,
-              position: {
-                x: note.position.x + offset.x,
-                y: note.position.y + offset.y,
-              },
-            }
-          : note
-      ),
-    }));
-  };
-
   const handleDeselect = (e: KonvaEventObject<MouseEvent>) => {
-    // Only deselect if clicking on the stage background
+    // Only deselect if clicking directly on the stage or background
     const clickedOnStage = e.target === e.target.getStage();
-    if (clickedOnStage) {
-      setBoardState(prev => ({
-        ...prev,
-        selectedId: null
-      }));
+    const clickedOnBackground = e.target.name() === 'background';
+    
+    if ((clickedOnStage || clickedOnBackground) && !isDragging) {
+      const newState = {
+        ...boardState,
+        selectedId: null,
+      };
+
+      pushHistory(newState, {
+        type: 'DESELECT_ITEM',
+        payload: null,
+        timestamp: Date.now(),
+        description: 'Deselected item',
+      });
     }
   };
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#F5F5F5' }}>
-      <Toolbar onAddNote={addNote} onAddFrame={addFrame} />
+      <Toolbar 
+        onAddNote={addNote} 
+        onAddFrame={addFrame}
+        canUndo={boardHistory.past.length > 0}
+        canRedo={boardHistory.future.length > 0}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+      />
       <Stage
         width={stageSize.width}
         height={stageSize.height}
@@ -346,8 +514,9 @@ const Board: React.FC = () => {
         onClick={handleDeselect}
       >
         <Layer>
-          {/* Background */}
+          {/* Background with name for deselection */}
           <Rect
+            name="background"
             width={stageSize.width}
             height={stageSize.height}
             fill="#ffffff"

@@ -112,8 +112,22 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      onClick={() => !isDragging && onSelect?.()}
-      onTap={onSelect}
+      onClick={(e) => {
+        // Stop event propagation
+        e.cancelBubble = true;
+        
+        // Only trigger selection if not dragging and not editing
+        if (!isDragging && !isEditing) {
+          onSelect?.();
+        }
+      }}
+      onTap={(e) => {
+        // Handle touch events similarly
+        e.cancelBubble = true;
+        if (!isDragging && !isEditing) {
+          onSelect?.();
+        }
+      }}
       ref={shapeRef}
       onTransformEnd={handleTransform}
     >
@@ -128,6 +142,13 @@ const StickyNote: React.FC<StickyNoteProps> = ({
         cornerRadius={5}
         stroke={isSelected ? "#0096FF" : undefined}
         strokeWidth={isSelected ? 2 : 0}
+        onClick={(e) => {
+          // Prevent click from reaching group
+          e.cancelBubble = true;
+          if (!isDragging && !isEditing) {
+            onSelect?.();
+          }
+        }}
       />
 
       {/* Top bar indicator for when note is in a frame */}

@@ -50,3 +50,21 @@ export interface BoardSection {
   position: Position;
   items: (Note | TextBox | Frame | Connection)[];
 }
+
+export interface BoardState {
+  sections: BoardSection[];
+  items: (Note | TextBox | Frame | Connection)[];
+}
+
+export interface BoardHistory {
+  past: BoardState[];
+  present: BoardState;
+  future: BoardState[];
+}
+
+export interface BoardAction {
+  type: string;
+  payload?: any;
+  timestamp: number;
+  description: string;
+}

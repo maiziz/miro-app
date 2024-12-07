@@ -1,108 +1,115 @@
 import React from 'react';
-import { NoteColor, FrameColor } from '../../types/board';
+import { Position } from '../../types/board';
 
 interface ToolbarProps {
-  onAddNote: (color: NoteColor) => void;
-  onAddFrame: (color: FrameColor) => void;
+  onAddNote: (position: Position) => void;
+  onAddFrame: (position: Position) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({ onAddNote, onAddFrame }) => {
-  const noteColors: NoteColor[] = ['yellow', 'blue', 'green', 'pink'];
-  const frameColors: FrameColor[] = ['gray', 'blue', 'green', 'purple'];
-  
+const Toolbar: React.FC<ToolbarProps> = ({
+  onAddNote,
+  onAddFrame,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+}) => {
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: '20px',
-        left: '20px',
-        background: 'white',
-        padding: '10px',
-        borderRadius: '8px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        zIndex: 1000,
-      }}
-    >
-      {/* Sticky Notes Section */}
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        gap: '8px',
-      }}>
-        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-          Add Sticky Note
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {noteColors.map((color) => (
-            <button
-              key={color}
-              onClick={() => onAddNote(color)}
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '4px',
-                border: '2px solid #ddd',
-                background: getColorValue(color),
-                cursor: 'pointer',
-                padding: 0,
-              }}
-            />
-          ))}
-        </div>
+    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 bg-white rounded-lg shadow-lg p-2 z-50">
+      <div className="flex items-center gap-2 border-r pr-2">
+        <button
+          onClick={() => onUndo()}
+          disabled={!canUndo}
+          className={`p-2 rounded hover:bg-gray-100 transition-colors ${
+            !canUndo ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+          title="Undo (Ctrl+Z)"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 7v6h6" />
+            <path d="M3 13c0-4.97 4.03-9 9-9s9 4.03 9 9-4.03 9-9 9H3" />
+          </svg>
+        </button>
+        <button
+          onClick={() => onRedo()}
+          disabled={!canRedo}
+          className={`p-2 rounded hover:bg-gray-100 transition-colors ${
+            !canRedo ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+          title="Redo (Ctrl+Shift+Z)"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 7v6h-6" />
+            <path d="M21 13c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9h18" />
+          </svg>
+        </button>
       </div>
-
-      {/* Frames Section */}
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        gap: '8px',
-      }}>
-        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-          Add Frame
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {frameColors.map((color) => (
-            <button
-              key={color}
-              onClick={() => onAddFrame(color)}
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '4px',
-                border: '2px solid #ddd',
-                background: getFrameColorValue(color),
-                cursor: 'pointer',
-                padding: 0,
-              }}
-            />
-          ))}
-        </div>
-      </div>
+      
+      <button
+        onClick={() => onAddNote({ x: window.innerWidth / 2 - 75, y: window.innerHeight / 2 - 75 })}
+        className="p-2 rounded hover:bg-gray-100 transition-colors"
+        title="Add Note"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M3 3h18v18H3zM12 8v8M8 12h8" />
+        </svg>
+      </button>
+      
+      <button
+        onClick={() => onAddFrame({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 100 })}
+        className="p-2 rounded hover:bg-gray-100 transition-colors"
+        title="Add Frame"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+        </svg>
+      </button>
     </div>
   );
 };
-
-function getColorValue(color: NoteColor): string {
-  const colorMap = {
-    yellow: '#fff9c4',
-    blue: '#bbdefb',
-    green: '#c8e6c9',
-    pink: '#f8bbd0',
-  };
-  return colorMap[color];
-}
-
-function getFrameColorValue(color: FrameColor): string {
-  const colorMap = {
-    gray: '#F0F0F0',
-    blue: '#E3F2FD',
-    green: '#E8F5E9',
-    purple: '#F3E5F5',
-  };
-  return colorMap[color];
-}
 
 export default Toolbar;

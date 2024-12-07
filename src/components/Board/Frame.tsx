@@ -36,6 +36,7 @@ const Frame: React.FC<FrameProps> = ({
   const [isEditingHeight, setIsEditingHeight] = useState(false);
   const [tempWidth, setTempWidth] = useState(size?.width?.toString() || '300');
   const [tempHeight, setTempHeight] = useState(size?.height?.toString() || '200');
+  const [draggedNotes, setDraggedNotes] = useState<string[]>([]);
   const groupRef = useRef(null);
   const trRef = useRef(null);
 
@@ -58,8 +59,32 @@ const Frame: React.FC<FrameProps> = ({
 
   const handleDragStart = (e: any) => {
     setIsDragging(true);
-    setStartPos({ x: e.target.x(), y: e.target.y() });
+    const newPosition = {
+      x: e.target.x(),
+      y: e.target.y(),
+    };
+    setStartPos(newPosition);
     onDragStart?.();
+
+    const overlappingNotes = notes?.filter(note => isNoteInFrame(note, newPosition)) || [];
+    setDraggedNotes(overlappingNotes.map(note => note.id));
+  };
+
+  const handleDragMove = (e: any) => {
+    if (!startPos || !draggedNotes.length) return;
+
+    const newPosition = {
+      x: e.target.x(),
+      y: e.target.y(),
+    };
+
+    const offset = {
+      x: newPosition.x - startPos.x,
+      y: newPosition.y - startPos.y,
+    };
+
+    onNotesMove?.(draggedNotes, offset);
+    setStartPos(newPosition);
   };
 
   const handleDragEnd = (e: any) => {
@@ -83,6 +108,7 @@ const Frame: React.FC<FrameProps> = ({
 
     onDragEnd?.(newPosition);
     setStartPos(null);
+    setDraggedNotes([]);
   };
 
   const handleTransform = () => {
@@ -115,15 +141,24 @@ const Frame: React.FC<FrameProps> = ({
     const noteRight = note.position.x + (note.size?.width || 150);
     const noteBottom = note.position.y + (note.size?.height || 150);
 
-    return (
-      note.position.x >= framePos.x &&
-      note.position.y >= framePos.y &&
-      noteRight <= frameRight &&
-      noteBottom <= frameBottom
+    const hasOverlap = !(
+      note.position.x > frameRight ||
+      noteRight < framePos.x ||
+      note.position.y > frameBottom ||
+      noteBottom < framePos.y
     );
-  };
 
-  const containedNotes = notes.filter(note => isNoteInFrame(note, position));
+    if (hasOverlap) {
+      const overlapWidth = Math.min(noteRight, frameRight) - Math.max(note.position.x, framePos.x);
+      const overlapHeight = Math.min(noteBottom, frameBottom) - Math.max(note.position.y, framePos.y);
+      const noteArea = (note.size?.width || 150) * (note.size?.height || 150);
+      const overlapArea = overlapWidth * overlapHeight;
+      
+      return (overlapArea / noteArea) >= 0.3;
+    }
+
+    return false;
+  };
 
   const handleTitleDblClick = () => {
     setIsEditing(true);
@@ -155,10 +190,23 @@ const Frame: React.FC<FrameProps> = ({
       y={position.y}
       draggable
       onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={(e) => {
-        e.cancelBubble = true; // Prevent click from bubbling to stage
-        if (!isDragging) onSelect?.();
+        // Stop event propagation
+        e.cancelBubble = true;
+        
+        // Only trigger selection if not dragging and not editing dimensions
+        if (!isDragging && !isEditingWidth && !isEditingHeight) {
+          onSelect?.();
+        }
+      }}
+      onTap={(e) => {
+        // Handle touch events similarly
+        e.cancelBubble = true;
+        if (!isDragging && !isEditingWidth && !isEditingHeight) {
+          onSelect?.();
+        }
       }}
       ref={groupRef}
       onTransformEnd={handleTransform}
@@ -175,6 +223,13 @@ const Frame: React.FC<FrameProps> = ({
         shadowBlur={isDragging ? 10 : 5}
         shadowOpacity={0.1}
         shadowOffset={{ x: 2, y: 2 }}
+        onClick={(e) => {
+          // Prevent click from reaching group
+          e.cancelBubble = true;
+          if (!isDragging && !isEditingWidth && !isEditingHeight) {
+            onSelect?.();
+          }
+        }}
       />
 
       {/* Size dimensions */}
@@ -327,7 +382,7 @@ const Frame: React.FC<FrameProps> = ({
       )}
 
       {/* Visual indicator for contained notes */}
-      {containedNotes.length > 0 && (
+      {notes.filter(note => isNoteInFrame(note, position)).length > 0 && (
         <Rect
           width={width}
           height={4}
@@ -378,7 +433,7 @@ const Frame: React.FC<FrameProps> = ({
                 }
               }}
             />
-            {containedNotes.length > 0 && (
+            {notes.filter(note => isNoteInFrame(note, position)).length > 0 && (
               <span style={{ 
                 fontSize: '12px', 
                 color: '#666',
@@ -387,7 +442,7 @@ const Frame: React.FC<FrameProps> = ({
                 borderRadius: '10px',
                 color: '#fff'
               }}>
-                {containedNotes.length}
+                {notes.filter(note => isNoteInFrame(note, position)).length}
               </span>
             )}
           </div>
@@ -403,7 +458,7 @@ const Frame: React.FC<FrameProps> = ({
             fill="#333"
             onDblClick={handleTitleDblClick}
           />
-          {containedNotes.length > 0 && (
+          {notes.filter(note => isNoteInFrame(note, position)).length > 0 && (
             <Rect
               x={width - 30}
               y={10}
@@ -413,13 +468,13 @@ const Frame: React.FC<FrameProps> = ({
               fill={colorMap[color].stroke}
             />
           )}
-          {containedNotes.length > 0 && (
+          {notes.filter(note => isNoteInFrame(note, position)).length > 0 && (
             <Text
               x={width - 30}
               y={10}
               width={20}
               height={20}
-              text={containedNotes.length.toString()}
+              text={notes.filter(note => isNoteInFrame(note, position)).length.toString()}
               fontSize={12}
               fontFamily="Arial"
               fill="#fff"
