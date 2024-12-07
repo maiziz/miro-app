@@ -40,6 +40,25 @@ const StickyNote: React.FC<StickyNoteProps> = ({
   const width = 150;
   const height = 150;
 
+  // Function to determine text color based on background color
+  const getContrastTextColor = (bgColor: string) => {
+    // Remove the # if present
+    const hex = bgColor.replace('#', '');
+    
+    // Convert hex to RGB
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    
+    // Calculate relative luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return black for light backgrounds, white for dark backgrounds
+    return luminance > 0.5 ? '#000000' : '#FFFFFF';
+  };
+
+  const textColor = getContrastTextColor(color);
+
   React.useEffect(() => {
     if (isSelected && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current]);
@@ -61,23 +80,27 @@ const StickyNote: React.FC<StickyNoteProps> = ({
     onDragEnd?.(newPosition);
   };
 
-  const handleTextDblClick = () => {
-    setIsEditing(true);
+  const handleTextareaBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value.trim();
+    if (newText !== text) {
+      onTextChange?.(newText);
+    }
+    setIsEditing(false);
   };
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      e.currentTarget.blur();
+      const target = e.target as HTMLTextAreaElement;
+      const newText = target.value.trim();
+      if (newText !== text) {
+        onTextChange?.(newText);
+      }
+      setIsEditing(false);
     }
     if (e.key === 'Escape') {
       setIsEditing(false);
     }
-  };
-
-  const handleTextareaBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
-    setIsEditing(false);
-    onTextChange?.(e.target.value);
   };
 
   const handleTransform = () => {
@@ -112,19 +135,14 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={(e) => {
-        // Stop event propagation
         e.cancelBubble = true;
-        
-        // Only trigger selection if not dragging and not editing
         if (!isDragging && !isEditing) {
           onSelect?.();
         }
       }}
-      onTap={(e) => {
-        // Handle touch events similarly
-        e.cancelBubble = true;
-        if (!isDragging && !isEditing) {
-          onSelect?.();
+      onDblClick={() => {
+        if (!isEditing) {
+          setIsEditing(true);
         }
       }}
       ref={shapeRef}
@@ -142,7 +160,6 @@ const StickyNote: React.FC<StickyNoteProps> = ({
         stroke={isSelected ? "#0096FF" : undefined}
         strokeWidth={isSelected ? 2 : 0}
         onClick={(e) => {
-          // Prevent click from reaching group
           e.cancelBubble = true;
           if (!isDragging && !isEditing) {
             onSelect?.();
@@ -167,8 +184,8 @@ const StickyNote: React.FC<StickyNoteProps> = ({
               position: 'absolute',
               top: '0px',
               left: '0px',
-              width: `${size?.width || width}px`,
-              height: `${size?.height || height}px`,
+              width: '100%',
+              height: '100%',
             }}
           >
             <div
@@ -191,11 +208,11 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                   padding: '0px',
                   margin: '0px',
                   background: color,
+                  color: textColor,
                   outline: 'none',
                   resize: 'none',
                   fontSize: '16px',
                   fontFamily: 'Arial',
-                  color: '#333',
                   lineHeight: '1.4',
                   overflow: 'hidden',
                 }}
@@ -215,10 +232,14 @@ const StickyNote: React.FC<StickyNoteProps> = ({
           y={10}
           fontSize={16}
           fontFamily="Arial"
-          fill="#333"
+          fill={textColor}
           wrap="word"
           align="left"
-          onDblClick={handleTextDblClick}
+          onDblClick={() => {
+            if (!isEditing) {
+              setIsEditing(true);
+            }
+          }}
         />
       )}
       {isSelected && !isEditing && (

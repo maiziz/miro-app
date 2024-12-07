@@ -474,6 +474,42 @@ const Board: React.FC = () => {
     }
   };
 
+  const handleNoteTextChange = (id: string, text: string) => {
+    const newState = {
+      ...boardState,
+      notes: boardState.notes.map(note =>
+        note.id === id
+          ? { ...note, text }
+          : note
+      ),
+    };
+
+    pushHistory(newState, {
+      type: 'EDIT_NOTE_TEXT',
+      payload: { id, text },
+      timestamp: Date.now(),
+      description: 'Edited note text',
+    });
+  };
+
+  const handleFrameTitleChange = (id: string, title: string) => {
+    const newState = {
+      ...boardState,
+      frames: boardState.frames.map(frame =>
+        frame.id === id
+          ? { ...frame, title }
+          : frame
+      ),
+    };
+
+    pushHistory(newState, {
+      type: 'EDIT_FRAME_TITLE',
+      payload: { id, title },
+      timestamp: Date.now(),
+      description: 'Edited frame title',
+    });
+  };
+
   // Grid properties
   const gridSize = 20;
   const gridColor = '#CCCCCC';
@@ -541,14 +577,13 @@ const Board: React.FC = () => {
         onClick={handleDeselect}
       >
         <Layer>
-          {/* Background with name for deselection */}
+          {/* Background */}
           <Rect
-            name="background"
             width={stageSize.width}
             height={stageSize.height}
             fill="#ffffff"
           />
-          
+
           {/* Grid */}
           <Group>
             {gridLines.map((line, i) => (
@@ -563,18 +598,19 @@ const Board: React.FC = () => {
           </Group>
 
           {/* Frames */}
-          {boardState.frames?.map((frame) => (
+          {boardState.frames.map((frame) => (
             <Frame
               key={frame.id}
               {...frame}
               isSelected={frame.id === boardState.selectedId}
               onSelect={() => handleFrameSelect(frame.id)}
-              onDragStart={() => handleFrameDragStart(frame.id)}
+              onDragStart={handleFrameDragStart}
               onDragEnd={(newPosition) => handleFrameDragEnd(frame.id, newPosition)}
               onChange={(newAttrs) => handleFrameChange(frame.id, newAttrs)}
-              stageScale={scale}
+              onTitleChange={(title) => handleFrameTitleChange(frame.id, title)}
               notes={boardState.notes}
               onNotesMove={handleNotesMove}
+              stageScale={scale}
             />
           ))}
 
@@ -585,9 +621,10 @@ const Board: React.FC = () => {
               {...note}
               isSelected={note.id === boardState.selectedId}
               onSelect={() => handleNoteSelect(note.id)}
-              onDragStart={() => handleNoteDragStart(note.id)}
+              onDragStart={handleNoteDragStart}
               onDragEnd={(newPosition) => handleNoteDragEnd(note.id, newPosition)}
               onChange={(newAttrs) => handleNoteChange(note.id, newAttrs)}
+              onTextChange={(text) => handleNoteTextChange(note.id, text)}
               stageScale={scale}
             />
           ))}

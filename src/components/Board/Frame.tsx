@@ -51,6 +51,25 @@ const Frame: React.FC<FrameProps> = ({
   const width = size?.width || 300;
   const height = size?.height || 200;
 
+  // Function to determine text color based on background color
+  const getContrastTextColor = (bgColor: string) => {
+    // Remove the # if present
+    const hex = bgColor.replace('#', '');
+    
+    // Convert hex to RGB
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    
+    // Calculate relative luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return black for light backgrounds, white for dark backgrounds
+    return luminance > 0.5 ? '#000000' : '#FFFFFF';
+  };
+
+  const textColor = getContrastTextColor(color);
+
   React.useEffect(() => {
     if (isSelected && trRef.current && groupRef.current) {
       trRef.current.nodes([groupRef.current]);
@@ -160,12 +179,32 @@ const Frame: React.FC<FrameProps> = ({
   };
 
   const handleTitleDblClick = () => {
-    setIsEditing(true);
+    if (!isEditing) {
+      setIsEditing(true);
+    }
   };
 
-  const handleTitleChange = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+  const handleTitleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const newTitle = e.target.value.trim();
+    if (newTitle !== title) {
+      onTitleChange?.(newTitle);
+    }
     setIsEditing(false);
-    onTitleChange?.(e.target.value);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const target = e.target as HTMLTextAreaElement;
+      const newTitle = target.value.trim();
+      if (newTitle !== title) {
+        onTitleChange?.(newTitle);
+      }
+      setIsEditing(false);
+    }
+    if (e.key === 'Escape') {
+      setIsEditing(false);
+    }
   };
 
   const handleDimensionChange = (dimension: 'width' | 'height', value: string) => {
@@ -190,13 +229,6 @@ const Frame: React.FC<FrameProps> = ({
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={(e) => {
-        e.cancelBubble = true;
-        
-        if (!isDragging && !isEditingWidth && !isEditingHeight) {
-          onSelect?.();
-        }
-      }}
-      onTap={(e) => {
         e.cancelBubble = true;
         if (!isDragging && !isEditingWidth && !isEditingHeight) {
           onSelect?.();
@@ -413,18 +445,10 @@ const Frame: React.FC<FrameProps> = ({
                 resize: 'none',
                 fontSize: '16px',
                 fontFamily: 'Arial',
-                color: '#333',
+                color: textColor,
               }}
-              onBlur={handleTitleChange}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-                if (e.key === 'Escape') {
-                  setIsEditing(false);
-                }
-              }}
+              onBlur={handleTitleBlur}
+              onKeyDown={handleTitleKeyDown}
             />
             {notes.filter(note => isNoteInFrame(note, position)).length > 0 && (
               <span style={{ 
@@ -441,41 +465,16 @@ const Frame: React.FC<FrameProps> = ({
           </div>
         </Html>
       ) : (
-        <Group>
-          <Text
-            x={10}
-            y={10}
-            text={title}
-            fontSize={16}
-            fontFamily="Arial"
-            fill="#333"
-            onDblClick={handleTitleDblClick}
-          />
-          {notes.filter(note => isNoteInFrame(note, position)).length > 0 && (
-            <Rect
-              x={width - 30}
-              y={10}
-              width={20}
-              height={20}
-              cornerRadius={10}
-              fill={color}
-            />
-          )}
-          {notes.filter(note => isNoteInFrame(note, position)).length > 0 && (
-            <Text
-              x={width - 30}
-              y={10}
-              width={20}
-              height={20}
-              text={notes.filter(note => isNoteInFrame(note, position)).length.toString()}
-              fontSize={12}
-              fontFamily="Arial"
-              fill="#fff"
-              align="center"
-              verticalAlign="middle"
-            />
-          )}
-        </Group>
+        <Text
+          text={title}
+          x={10}
+          y={10}
+          width={width - 20}
+          fontSize={16}
+          fontFamily="Arial"
+          fill={textColor}
+          onDblClick={handleTitleDblClick}
+        />
       )}
 
       {/* Transformer */}
