@@ -1,15 +1,19 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Stage, Layer, Rect } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { v4 as uuidv4 } from 'uuid';
 import Toolbar from './Toolbar';
 import StickyNote from './StickyNote';
-import { Note, Position, NoteColor } from '../../types/board';
+import Frame from './Frame';
+import { Note, Position, NoteColor, Frame as FrameType, FrameColor } from '../../types/board';
 
 interface BoardState {
   notes: Note[];
+  frames: FrameType[];
   selectedId: string | null;
 }
+
+const STORAGE_KEY = 'miroboard_state';
 
 const Board: React.FC = () => {
   const [stageSize, setStageSize] = useState({
@@ -18,15 +22,24 @@ const Board: React.FC = () => {
   });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<Position>({ x: 0, y: 0 });
-  const [boardState, setBoardState] = useState<BoardState>({
-    notes: [],
-    selectedId: null,
+  const [boardState, setBoardState] = useState<BoardState>(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    return savedState ? JSON.parse(savedState) : {
+      notes: [],
+      frames: [],
+      selectedId: null,
+    };
   });
   const stageRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(boardState));
+  }, [boardState]);
+
   // Handle window resize
-  React.useEffect(() => {
+  useEffect(() => {
     const checkSize = () => {
       setStageSize({
         width: window.innerWidth,
@@ -37,6 +50,88 @@ const Board: React.FC = () => {
     window.addEventListener('resize', checkSize);
     return () => window.removeEventListener('resize', checkSize);
   }, []);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLTextAreaElement) {
+        return; // Don't handle shortcuts while editing text
+      }
+
+      // Delete selected note
+      if ((e.key === 'Delete' || e.key === 'Backspace') && boardState.selectedId) {
+        e.preventDefault();
+        setBoardState(prev => ({
+          ...prev,
+          notes: prev.notes.filter(note => note.id !== prev.selectedId),
+          frames: prev.frames.filter(frame => frame.id !== prev.selectedId),
+          selectedId: null,
+        }));
+      }
+
+      // Copy selected note
+      if (e.key === 'c' && (e.ctrlKey || e.metaKey) && boardState.selectedId) {
+        e.preventDefault();
+        const selectedNote = boardState.notes.find(note => note.id === boardState.selectedId);
+        const selectedFrame = boardState.frames.find(frame => frame.id === boardState.selectedId);
+        if (selectedNote) {
+          localStorage.setItem('clipboard_note', JSON.stringify(selectedNote));
+        } else if (selectedFrame) {
+          localStorage.setItem('clipboard_frame', JSON.stringify(selectedFrame));
+        }
+      }
+
+      // Paste note
+      if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        const clipboardNote = localStorage.getItem('clipboard_note');
+        const clipboardFrame = localStorage.getItem('clipboard_frame');
+        if (clipboardNote) {
+          const note: Note = JSON.parse(clipboardNote);
+          const stage = stageRef.current;
+          const pointerPosition = stage.getPointerPosition();
+          const newNote: Note = {
+            ...note,
+            id: uuidv4(),
+            position: {
+              x: (pointerPosition.x - stage.x()) / scale,
+              y: (pointerPosition.y - stage.y()) / scale,
+            },
+          };
+          setBoardState(prev => ({
+            ...prev,
+            notes: [...prev.notes, newNote],
+            selectedId: newNote.id,
+          }));
+        } else if (clipboardFrame) {
+          const frame: FrameType = JSON.parse(clipboardFrame);
+          const stage = stageRef.current;
+          const pointerPosition = stage.getPointerPosition();
+          const newFrame: FrameType = {
+            ...frame,
+            id: uuidv4(),
+            position: {
+              x: (pointerPosition.x - stage.x()) / scale,
+              y: (pointerPosition.y - stage.y()) / scale,
+            },
+          };
+          setBoardState(prev => ({
+            ...prev,
+            frames: [...prev.frames, newFrame],
+            selectedId: newFrame.id,
+          }));
+        }
+      }
+
+      // Deselect with Escape
+      if (e.key === 'Escape') {
+        setBoardState(prev => ({ ...prev, selectedId: null }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [boardState.selectedId, scale]);
 
   // Handle zoom
   const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
@@ -97,13 +192,29 @@ const Board: React.FC = () => {
     }));
   };
 
-  // Update note position
-  const handleNoteChange = (id: string, newAttrs: Partial<Note>) => {
+  // Add frame
+  const addFrame = (color: FrameColor = 'gray') => {
+    const stage = stageRef.current;
+    const position = stage.getPointerPosition();
+    const newFrame: FrameType = {
+      id: uuidv4(),
+      type: 'frame',
+      position: {
+        x: (position.x - stage.x()) / scale,
+        y: (position.y - stage.y()) / scale,
+      },
+      title: 'New Frame',
+      color,
+      size: {
+        width: 300,
+        height: 200,
+      },
+    };
+
     setBoardState(prev => ({
       ...prev,
-      notes: prev.notes.map(note =>
-        note.id === id ? { ...note, ...newAttrs } : note
-      ),
+      frames: [...(prev.frames || []), newFrame],
+      selectedId: newFrame.id,
     }));
   };
 
@@ -118,8 +229,49 @@ const Board: React.FC = () => {
     handleNoteChange(id, { position: newPosition });
   };
 
+  // Update note
+  const handleNoteChange = (id: string, newAttrs: Partial<Note>) => {
+    setBoardState(prev => ({
+      ...prev,
+      notes: prev.notes.map(note =>
+        note.id === id ? { ...note, ...newAttrs } : note
+      ),
+    }));
+  };
+
   // Select note
   const handleNoteSelect = (id: string) => {
+    if (!isDragging) {
+      setBoardState(prev => ({
+        ...prev,
+        selectedId: id,
+      }));
+    }
+  };
+
+  // Handle frame drag
+  const handleFrameDragStart = (id: string) => {
+    setIsDragging(true);
+    handleFrameSelect(id);
+  };
+
+  const handleFrameDragEnd = (id: string, newPosition: Position) => {
+    setIsDragging(false);
+    handleFrameChange(id, { position: newPosition });
+  };
+
+  // Update frame
+  const handleFrameChange = (id: string, newAttrs: Partial<FrameType>) => {
+    setBoardState(prev => ({
+      ...prev,
+      frames: prev.frames.map(frame =>
+        frame.id === id ? { ...frame, ...newAttrs } : frame
+      ),
+    }));
+  };
+
+  // Select frame
+  const handleFrameSelect = (id: string) => {
     if (!isDragging) {
       setBoardState(prev => ({
         ...prev,
@@ -139,7 +291,7 @@ const Board: React.FC = () => {
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#F5F5F5' }}>
-      <Toolbar onAddNote={addNote} />
+      <Toolbar onAddNote={addNote} onAddFrame={addFrame} />
       <Stage
         width={stageSize.width}
         height={stageSize.height}
@@ -190,6 +342,20 @@ const Board: React.FC = () => {
               height={1}
               fill={gridColor}
               opacity={gridOpacity}
+            />
+          ))}
+
+          {/* Frames */}
+          {boardState.frames?.map((frame) => (
+            <Frame
+              key={frame.id}
+              {...frame}
+              isSelected={frame.id === boardState.selectedId}
+              onSelect={() => handleFrameSelect(frame.id)}
+              onDragStart={() => handleFrameDragStart(frame.id)}
+              onDragEnd={(newPosition) => handleFrameDragEnd(frame.id, newPosition)}
+              onChange={(newAttrs) => handleFrameChange(frame.id, newAttrs)}
+              stageScale={scale}
             />
           ))}
 

@@ -6,17 +6,17 @@ import { Note, Position } from '../../types/board';
 interface StickyNoteProps extends Note {
   isSelected?: boolean;
   onSelect?: () => void;
-  onChange?: (newAttrs: any) => void;
+  onChange?: (newAttrs: Partial<Note>) => void;
   onDragStart?: () => void;
   onDragEnd?: (position: Position) => void;
   stageScale: number;
 }
 
 const StickyNote: React.FC<StickyNoteProps> = ({
-  id,
   content,
   position,
   color,
+  size,
   isSelected = false,
   onSelect,
   onChange,
@@ -28,7 +28,9 @@ const StickyNote: React.FC<StickyNoteProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const shapeRef = useRef(null);
   const trRef = useRef(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const width = 150;
+  const height = 150;
 
   const colorMap = {
     yellow: '#fff9c4',
@@ -43,16 +45,6 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       trRef.current.getLayer().batchDraw();
     }
   }, [isSelected]);
-
-  React.useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      textareaRef.current.focus();
-      textareaRef.current.select();
-    }
-  }, [isEditing]);
-
-  const width = 150;
-  const height = 150;
 
   const handleDragStart = () => {
     setIsDragging(true);
@@ -74,8 +66,8 @@ const StickyNote: React.FC<StickyNoteProps> = ({
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      setIsEditing(false);
-      onChange?.({ content: e.currentTarget.value });
+      e.preventDefault();
+      e.currentTarget.blur();
     }
     if (e.key === 'Escape') {
       setIsEditing(false);
@@ -85,6 +77,32 @@ const StickyNote: React.FC<StickyNoteProps> = ({
   const handleTextareaBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     setIsEditing(false);
     onChange?.({ content: e.target.value });
+  };
+
+  const handleTransform = () => {
+    const node = shapeRef.current;
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
+    const rotation = node.rotation();
+
+    // Reset scale and update width/height
+    node.scaleX(1);
+    node.scaleY(1);
+    
+    const minWidth = 100;
+    const minHeight = 100;
+    const maxWidth = 500;
+    const maxHeight = 500;
+
+    const newWidth = Math.max(minWidth, Math.min(maxWidth, Math.abs(node.width() * scaleX)));
+    const newHeight = Math.max(minHeight, Math.min(maxHeight, Math.abs(node.height() * scaleY)));
+
+    onChange?.({
+      size: {
+        width: newWidth,
+        height: newHeight,
+      },
+    });
   };
 
   return (
@@ -97,71 +115,74 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       onClick={() => !isDragging && onSelect?.()}
       onTap={onSelect}
       ref={shapeRef}
+      onTransformEnd={handleTransform}
     >
       <Rect
-        width={width}
-        height={height}
+        width={size?.width || width}
+        height={size?.height || height}
         fill={colorMap[color]}
         shadowColor="black"
         shadowBlur={isDragging ? 10 : 5}
         shadowOpacity={0.2}
         shadowOffset={{ x: 2, y: 2 }}
         cornerRadius={5}
+        stroke={isSelected ? "#0096FF" : undefined}
+        strokeWidth={isSelected ? 2 : 0}
       />
       {isEditing ? (
-        <Html
-          divProps={{
-            style: {
-              position: 'absolute',
-              top: '0px',
-              left: '0px',
-              width: `${width}px`,
-              height: `${height}px`,
-            },
-          }}
-        >
+        <Html>
           <div
             style={{
               position: 'absolute',
-              top: '10px',
-              left: '10px',
-              width: `${width - 20}px`,
-              height: `${height - 20}px`,
-              transform: `scale(${1 / stageScale})`,
-              transformOrigin: 'top left',
+              top: '0px',
+              left: '0px',
+              width: `${size?.width || width}px`,
+              height: `${size?.height || height}px`,
             }}
           >
-            <textarea
-              ref={textareaRef}
+            <div
               style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-                padding: '0px',
-                margin: '0px',
-                background: colorMap[color],
-                outline: 'none',
-                resize: 'none',
-                fontSize: '16px',
-                fontFamily: 'Arial',
-                color: '#333',
-                lineHeight: '1.4',
-                overflow: 'hidden',
+                position: 'absolute',
+                top: '10px',
+                left: '10px',
+                width: `${(size?.width || width) - 20}px`,
+                height: `${(size?.height || height) - 20}px`,
+                transform: `scale(${1 / stageScale})`,
+                transformOrigin: 'top left',
               }}
-              defaultValue={content}
-              onKeyDown={handleTextareaKeyDown}
-              onBlur={handleTextareaBlur}
-            />
+            >
+              <textarea
+                autoFocus
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  padding: '0px',
+                  margin: '0px',
+                  background: colorMap[color],
+                  outline: 'none',
+                  resize: 'none',
+                  fontSize: '16px',
+                  fontFamily: 'Arial',
+                  color: '#333',
+                  lineHeight: '1.4',
+                  overflow: 'hidden',
+                }}
+                defaultValue={content}
+                onKeyDown={handleTextareaKeyDown}
+                onBlur={handleTextareaBlur}
+              />
+            </div>
           </div>
         </Html>
       ) : (
         <Text
           text={content}
-          width={width - 20}
-          height={height - 20}
+          width={(size?.width || width) - 20}
+          height={(size?.height || height) - 20}
           x={10}
           y={10}
-          fontSize={16 / stageScale}
+          fontSize={16}
           fontFamily="Arial"
           fill="#333"
           wrap="word"
@@ -175,19 +196,27 @@ const StickyNote: React.FC<StickyNoteProps> = ({
           boundBoxFunc={(oldBox, newBox) => {
             const minWidth = 100;
             const minHeight = 100;
-            const maxWidth = 400;
-            const maxHeight = 400;
+            const maxWidth = 500;
+            const maxHeight = 500;
             
-            if (
-              newBox.width < minWidth ||
-              newBox.height < minHeight ||
-              newBox.width > maxWidth ||
-              newBox.height > maxHeight
-            ) {
-              return oldBox;
-            }
-            return newBox;
+            const isWidthValid = newBox.width >= minWidth && newBox.width <= maxWidth;
+            const isHeightValid = newBox.height >= minHeight && newBox.height <= maxHeight;
+            
+            return {
+              ...newBox,
+              width: isWidthValid ? newBox.width : oldBox.width,
+              height: isHeightValid ? newBox.height : oldBox.height,
+            };
           }}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          rotateEnabled={false}
+          flipEnabled={true}
+          borderStroke="#0096FF"
+          borderStrokeWidth={2}
+          anchorFill="#0096FF"
+          anchorStroke="#fff"
+          anchorSize={8}
+          anchorCornerRadius={2}
         />
       )}
     </Group>
