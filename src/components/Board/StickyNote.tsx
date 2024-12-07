@@ -129,6 +129,15 @@ const StickyNote: React.FC<StickyNoteProps> = ({
         stroke={isSelected ? "#0096FF" : undefined}
         strokeWidth={isSelected ? 2 : 0}
       />
+
+      {/* Top bar indicator for when note is in a frame */}
+      <Rect
+        width={size?.width || width}
+        height={3}
+        fill={colorMap[color]}
+        opacity={0.6}
+      />
+
       {isEditing ? (
         <Html>
           <div

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Group, Rect, Text, Transformer } from 'react-konva';
+import { Group, Rect, Text, Transformer, Line } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import { Frame as FrameType, Position, Note } from '../../types/board';
 
@@ -30,7 +30,12 @@ const Frame: React.FC<FrameProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showDimensions, setShowDimensions] = useState(false);
   const [startPos, setStartPos] = useState<Position | null>(null);
+  const [isEditingWidth, setIsEditingWidth] = useState(false);
+  const [isEditingHeight, setIsEditingHeight] = useState(false);
+  const [tempWidth, setTempWidth] = useState(size?.width?.toString() || '300');
+  const [tempHeight, setTempHeight] = useState(size?.height?.toString() || '200');
   const groupRef = useRef(null);
   const trRef = useRef(null);
 
@@ -70,7 +75,6 @@ const Frame: React.FC<FrameProps> = ({
         y: newPosition.y - startPos.y,
       };
 
-      // Get notes that are inside the frame
       const containedNotes = notes.filter(note => isNoteInFrame(note, startPos));
       if (containedNotes.length > 0) {
         onNotesMove?.(containedNotes.map(note => note.id), offset);
@@ -81,26 +85,11 @@ const Frame: React.FC<FrameProps> = ({
     setStartPos(null);
   };
 
-  const isNoteInFrame = (note: Note, framePos: Position) => {
-    const frameRight = framePos.x + width;
-    const frameBottom = framePos.y + height;
-    const noteRight = note.position.x + (note.size?.width || 150);
-    const noteBottom = note.position.y + (note.size?.height || 150);
-
-    return (
-      note.position.x >= framePos.x &&
-      note.position.y >= framePos.y &&
-      noteRight <= frameRight &&
-      noteBottom <= frameBottom
-    );
-  };
-
   const handleTransform = () => {
     const node = groupRef.current;
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
 
-    // Reset scale and update width/height
     node.scaleX(1);
     node.scaleY(1);
     
@@ -120,6 +109,22 @@ const Frame: React.FC<FrameProps> = ({
     });
   };
 
+  const isNoteInFrame = (note: Note, framePos: Position) => {
+    const frameRight = framePos.x + width;
+    const frameBottom = framePos.y + height;
+    const noteRight = note.position.x + (note.size?.width || 150);
+    const noteBottom = note.position.y + (note.size?.height || 150);
+
+    return (
+      note.position.x >= framePos.x &&
+      note.position.y >= framePos.y &&
+      noteRight <= frameRight &&
+      noteBottom <= frameBottom
+    );
+  };
+
+  const containedNotes = notes.filter(note => isNoteInFrame(note, position));
+
   const handleTitleDblClick = () => {
     setIsEditing(true);
   };
@@ -127,6 +132,21 @@ const Frame: React.FC<FrameProps> = ({
   const handleTitleChange = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     setIsEditing(false);
     onChange?.({ title: e.target.value });
+  };
+
+  const handleDimensionChange = (dimension: 'width' | 'height', value: string) => {
+    const numValue = parseInt(value, 10);
+    const minSize = dimension === 'width' ? 200 : 150;
+    const maxSize = dimension === 'width' ? 1000 : 800;
+
+    if (!isNaN(numValue) && numValue >= minSize && numValue <= maxSize) {
+      onChange?.({
+        size: {
+          width: dimension === 'width' ? numValue : width,
+          height: dimension === 'height' ? numValue : height,
+        },
+      });
+    }
   };
 
   return (
@@ -139,11 +159,19 @@ const Frame: React.FC<FrameProps> = ({
       onClick={() => !isDragging && onSelect?.()}
       ref={groupRef}
       onTransformEnd={handleTransform}
+      onMouseEnter={() => setShowDimensions(true)}
+      onMouseLeave={() => {
+        if (!isSelected) {
+          setShowDimensions(false);
+          setIsEditingWidth(false);
+          setIsEditingHeight(false);
+        }
+      }}
     >
       {/* Frame background */}
       <Rect
-        width={size?.width || width}
-        height={size?.height || height}
+        width={width}
+        height={height}
         fill={colorMap[color].fill}
         stroke={isSelected ? "#0096FF" : colorMap[color].stroke}
         strokeWidth={isSelected ? 2 : 1}
@@ -153,6 +181,166 @@ const Frame: React.FC<FrameProps> = ({
         shadowOpacity={0.1}
         shadowOffset={{ x: 2, y: 2 }}
       />
+
+      {/* Size dimensions */}
+      {(showDimensions || isSelected) && (
+        <>
+          {/* Width dimension */}
+          <Group y={height + 10}>
+            <Line
+              points={[0, 0, width, 0]}
+              stroke="#666"
+              strokeWidth={1}
+              dash={[4, 4]}
+            />
+            <Line
+              points={[0, -5, 0, 5]}
+              stroke="#666"
+              strokeWidth={1}
+            />
+            <Line
+              points={[width, -5, width, 5]}
+              stroke="#666"
+              strokeWidth={1}
+            />
+            {isEditingWidth ? (
+              <Html>
+                <input
+                  type="text"
+                  value={tempWidth}
+                  onChange={(e) => setTempWidth(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleDimensionChange('width', tempWidth);
+                      setIsEditingWidth(false);
+                    }
+                    if (e.key === 'Escape') {
+                      setTempWidth(width.toString());
+                      setIsEditingWidth(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    handleDimensionChange('width', tempWidth);
+                    setIsEditingWidth(false);
+                  }}
+                  autoFocus
+                  style={{
+                    position: 'absolute',
+                    left: `${width / 2 - 25}px`,
+                    top: '0px',
+                    width: '50px',
+                    height: '20px',
+                    fontSize: '12px',
+                    padding: '2px 4px',
+                    border: '1px solid #666',
+                    borderRadius: '3px',
+                    background: 'white',
+                    transform: `scale(${1 / stageScale})`,
+                    transformOrigin: 'top left',
+                  }}
+                />
+              </Html>
+            ) : (
+              <Text
+                x={width / 2}
+                y={5}
+                text={`${Math.round(width)}px`}
+                fontSize={12}
+                fill="#666"
+                align="center"
+                offsetX={20}
+                onClick={() => {
+                  setIsEditingWidth(true);
+                  setTempWidth(width.toString());
+                }}
+              />
+            )}
+          </Group>
+
+          {/* Height dimension */}
+          <Group x={width + 10}>
+            <Line
+              points={[0, 0, 0, height]}
+              stroke="#666"
+              strokeWidth={1}
+              dash={[4, 4]}
+            />
+            <Line
+              points={[-5, 0, 5, 0]}
+              stroke="#666"
+              strokeWidth={1}
+            />
+            <Line
+              points={[-5, height, 5, height]}
+              stroke="#666"
+              strokeWidth={1}
+            />
+            {isEditingHeight ? (
+              <Html>
+                <input
+                  type="text"
+                  value={tempHeight}
+                  onChange={(e) => setTempHeight(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleDimensionChange('height', tempHeight);
+                      setIsEditingHeight(false);
+                    }
+                    if (e.key === 'Escape') {
+                      setTempHeight(height.toString());
+                      setIsEditingHeight(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    handleDimensionChange('height', tempHeight);
+                    setIsEditingHeight(false);
+                  }}
+                  autoFocus
+                  style={{
+                    position: 'absolute',
+                    left: '10px',
+                    top: `${height / 2 - 10}px`,
+                    width: '50px',
+                    height: '20px',
+                    fontSize: '12px',
+                    padding: '2px 4px',
+                    border: '1px solid #666',
+                    borderRadius: '3px',
+                    background: 'white',
+                    transform: `scale(${1 / stageScale})`,
+                    transformOrigin: 'top left',
+                  }}
+                />
+              </Html>
+            ) : (
+              <Text
+                x={5}
+                y={height / 2}
+                text={`${Math.round(height)}px`}
+                fontSize={12}
+                fill="#666"
+                align="left"
+                offsetY={-6}
+                onClick={() => {
+                  setIsEditingHeight(true);
+                  setTempHeight(height.toString());
+                }}
+              />
+            )}
+          </Group>
+        </>
+      )}
+
+      {/* Visual indicator for contained notes */}
+      {containedNotes.length > 0 && (
+        <Rect
+          width={width}
+          height={4}
+          fill={colorMap[color].stroke}
+          opacity={0.8}
+          y={0}
+        />
+      )}
 
       {/* Frame title */}
       {isEditing ? (
@@ -164,13 +352,16 @@ const Frame: React.FC<FrameProps> = ({
               left: '10px',
               transform: `scale(${1 / stageScale})`,
               transformOrigin: 'top left',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
             }}
           >
             <textarea
               autoFocus
               defaultValue={title}
               style={{
-                width: `${(size?.width || width) - 20}px`,
+                width: `${width - 20}px`,
                 height: '30px',
                 border: 'none',
                 padding: '5px',
@@ -192,18 +383,56 @@ const Frame: React.FC<FrameProps> = ({
                 }
               }}
             />
+            {containedNotes.length > 0 && (
+              <span style={{ 
+                fontSize: '12px', 
+                color: '#666',
+                background: colorMap[color].stroke,
+                padding: '2px 6px',
+                borderRadius: '10px',
+                color: '#fff'
+              }}>
+                {containedNotes.length}
+              </span>
+            )}
           </div>
         </Html>
       ) : (
-        <Text
-          x={10}
-          y={10}
-          text={title}
-          fontSize={16}
-          fontFamily="Arial"
-          fill="#333"
-          onDblClick={handleTitleDblClick}
-        />
+        <Group>
+          <Text
+            x={10}
+            y={10}
+            text={title}
+            fontSize={16}
+            fontFamily="Arial"
+            fill="#333"
+            onDblClick={handleTitleDblClick}
+          />
+          {containedNotes.length > 0 && (
+            <Rect
+              x={width - 30}
+              y={10}
+              width={20}
+              height={20}
+              cornerRadius={10}
+              fill={colorMap[color].stroke}
+            />
+          )}
+          {containedNotes.length > 0 && (
+            <Text
+              x={width - 30}
+              y={10}
+              width={20}
+              height={20}
+              text={containedNotes.length.toString()}
+              fontSize={12}
+              fontFamily="Arial"
+              fill="#fff"
+              align="center"
+              verticalAlign="middle"
+            />
+          )}
+        </Group>
       )}
 
       {/* Transformer */}
