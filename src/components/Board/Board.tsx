@@ -27,6 +27,7 @@ const Board: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const stageRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const [selectedColor, setSelectedColor] = useState('#FFD700');
 
   // Shorthand for current board state
   const boardState = boardHistory.present;
@@ -257,54 +258,51 @@ const Board: React.FC = () => {
   };
 
   // Add sticky note
-  const addNote = (position: Position, color: NoteColor = 'yellow') => {
-    const newNote: Note = {
+  const addNote = (position: Position) => {
+    const note: Note = {
       id: uuidv4(),
       type: 'note',
       position,
-      content: 'Double click to edit',
-      color,
+      text: 'New note',
+      color: selectedColor,
     };
 
     const newState = {
       ...boardState,
-      notes: [...boardState.notes, newNote],
-      selectedId: newNote.id,
+      notes: [...boardState.notes, note],
+      selectedId: note.id,
     };
 
     pushHistory(newState, {
       type: 'ADD_NOTE',
-      payload: newNote,
+      payload: note,
       timestamp: Date.now(),
-      description: 'Added new note',
+      description: 'Added note',
     });
   };
 
   // Add frame
-  const addFrame = (position: Position, color: FrameColor = 'gray') => {
-    const newFrame: FrameType = {
+  const addFrame = (position: Position) => {
+    const frame: FrameType = {
       id: uuidv4(),
       type: 'frame',
       position,
+      size: { width: 300, height: 200 },
       title: 'New Frame',
-      color,
-      size: {
-        width: 300,
-        height: 200,
-      },
+      color: selectedColor,
     };
 
     const newState = {
       ...boardState,
-      frames: [...boardState.frames, newFrame],
-      selectedId: newFrame.id,
+      frames: [...boardState.frames, frame],
+      selectedId: frame.id,
     };
 
     pushHistory(newState, {
       type: 'ADD_FRAME',
-      payload: newFrame,
+      payload: frame,
       timestamp: Date.now(),
-      description: 'Added new frame',
+      description: 'Added frame',
     });
   };
 
@@ -449,6 +447,33 @@ const Board: React.FC = () => {
     }));
   };
 
+  const handleColorChange = (color: string) => {
+    setSelectedColor(color);
+    
+    if (boardState.selectedId) {
+      const newState = {
+        ...boardState,
+        notes: boardState.notes.map(note =>
+          note.id === boardState.selectedId
+            ? { ...note, color }
+            : note
+        ),
+        frames: boardState.frames.map(frame =>
+          frame.id === boardState.selectedId
+            ? { ...frame, color }
+            : frame
+        ),
+      };
+
+      pushHistory(newState, {
+        type: 'CHANGE_COLOR',
+        payload: { id: boardState.selectedId, color },
+        timestamp: Date.now(),
+        description: 'Changed item color',
+      });
+    }
+  };
+
   // Grid properties
   const gridSize = 20;
   const gridColor = '#CCCCCC';
@@ -499,6 +524,8 @@ const Board: React.FC = () => {
         canRedo={boardHistory.future.length > 0}
         onUndo={handleUndo}
         onRedo={handleRedo}
+        selectedColor={selectedColor}
+        onColorChange={handleColorChange}
       />
       <Stage
         width={stageSize.width}

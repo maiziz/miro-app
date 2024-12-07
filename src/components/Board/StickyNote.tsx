@@ -1,28 +1,36 @@
 import React, { useState, useRef } from 'react';
 import { Group, Rect, Text, Transformer } from 'react-konva';
 import { Html } from 'react-konva-utils';
-import { Note, Position } from '../../types/board';
+import { Position, Size } from '../../types/board';
 
-interface StickyNoteProps extends Note {
+interface StickyNoteProps {
+  id: string;
+  position: Position;
+  text: string;
   isSelected?: boolean;
   onSelect?: () => void;
-  onChange?: (newAttrs: Partial<Note>) => void;
   onDragStart?: () => void;
   onDragEnd?: (position: Position) => void;
-  stageScale: number;
+  onTextChange?: (text: string) => void;
+  size?: Size;
+  onResize?: (size: Size) => void;
+  color: string;
+  isInFrame?: boolean;
 }
 
 const StickyNote: React.FC<StickyNoteProps> = ({
-  content,
+  id,
   position,
-  color,
-  size,
+  text,
   isSelected = false,
   onSelect,
-  onChange,
   onDragStart,
   onDragEnd,
-  stageScale,
+  onTextChange,
+  size,
+  onResize,
+  color = '#FFD700',
+  isInFrame = false,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -31,13 +39,6 @@ const StickyNote: React.FC<StickyNoteProps> = ({
 
   const width = 150;
   const height = 150;
-
-  const colorMap = {
-    yellow: '#fff9c4',
-    blue: '#bbdefb',
-    green: '#c8e6c9',
-    pink: '#f8bbd0',
-  };
 
   React.useEffect(() => {
     if (isSelected && trRef.current && shapeRef.current) {
@@ -76,7 +77,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
 
   const handleTextareaBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     setIsEditing(false);
-    onChange?.({ content: e.target.value });
+    onTextChange?.(e.target.value);
   };
 
   const handleTransform = () => {
@@ -97,11 +98,9 @@ const StickyNote: React.FC<StickyNoteProps> = ({
     const newWidth = Math.max(minWidth, Math.min(maxWidth, Math.abs(node.width() * scaleX)));
     const newHeight = Math.max(minHeight, Math.min(maxHeight, Math.abs(node.height() * scaleY)));
 
-    onChange?.({
-      size: {
-        width: newWidth,
-        height: newHeight,
-      },
+    onResize?.({
+      width: newWidth,
+      height: newHeight,
     });
   };
 
@@ -134,7 +133,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       <Rect
         width={size?.width || width}
         height={size?.height || height}
-        fill={colorMap[color]}
+        fill={color}
         shadowColor="black"
         shadowBlur={isDragging ? 10 : 5}
         shadowOpacity={0.2}
@@ -152,13 +151,15 @@ const StickyNote: React.FC<StickyNoteProps> = ({
       />
 
       {/* Top bar indicator for when note is in a frame */}
-      <Rect
-        width={size?.width || width}
-        height={3}
-        fill={colorMap[color]}
-        opacity={0.6}
-      />
-
+      {isInFrame && (
+        <Rect
+          width={size?.width || width}
+          height={4}
+          fill={color}
+          opacity={0.8}
+          y={0}
+        />
+      )}
       {isEditing ? (
         <Html>
           <div
@@ -177,7 +178,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                 left: '10px',
                 width: `${(size?.width || width) - 20}px`,
                 height: `${(size?.height || height) - 20}px`,
-                transform: `scale(${1 / stageScale})`,
+                transform: `scale(${1 / 1})`,
                 transformOrigin: 'top left',
               }}
             >
@@ -189,7 +190,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                   border: 'none',
                   padding: '0px',
                   margin: '0px',
-                  background: colorMap[color],
+                  background: color,
                   outline: 'none',
                   resize: 'none',
                   fontSize: '16px',
@@ -198,7 +199,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
                   lineHeight: '1.4',
                   overflow: 'hidden',
                 }}
-                defaultValue={content}
+                defaultValue={text}
                 onKeyDown={handleTextareaKeyDown}
                 onBlur={handleTextareaBlur}
               />
@@ -207,7 +208,7 @@ const StickyNote: React.FC<StickyNoteProps> = ({
         </Html>
       ) : (
         <Text
-          text={content}
+          text={text}
           width={(size?.width || width) - 20}
           height={(size?.height || height) - 20}
           x={10}

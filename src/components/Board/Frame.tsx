@@ -1,32 +1,40 @@
 import React, { useState, useRef } from 'react';
 import { Group, Rect, Text, Transformer, Line } from 'react-konva';
 import { Html } from 'react-konva-utils';
-import { Frame as FrameType, Position, Note } from '../../types/board';
+import { Frame as FrameType, Position, Note, Size } from '../../types/board';
 
 interface FrameProps extends FrameType {
+  id: string;
+  position: Position;
+  size?: Size;
   isSelected?: boolean;
   onSelect?: () => void;
-  onChange?: (newAttrs: Partial<FrameType>) => void;
   onDragStart?: () => void;
   onDragEnd?: (position: Position) => void;
-  stageScale: number;
+  onResize?: (size: Size) => void;
   notes?: Note[];
   onNotesMove?: (noteIds: string[], offset: Position) => void;
+  color: string;
+  title?: string;
+  onTitleChange?: (title: string) => void;
+  stageScale: number;
 }
 
 const Frame: React.FC<FrameProps> = ({
-  title,
+  id,
   position,
   size,
-  color,
   isSelected = false,
   onSelect,
-  onChange,
   onDragStart,
   onDragEnd,
-  stageScale,
+  onResize,
   notes = [],
   onNotesMove,
+  color = '#E3E3E3',
+  title = 'Untitled Frame',
+  onTitleChange,
+  stageScale,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -42,13 +50,6 @@ const Frame: React.FC<FrameProps> = ({
 
   const width = size?.width || 300;
   const height = size?.height || 200;
-
-  const colorMap = {
-    gray: { fill: '#F0F0F0', stroke: '#CCCCCC' },
-    blue: { fill: '#E3F2FD', stroke: '#90CAF9' },
-    green: { fill: '#E8F5E9', stroke: '#A5D6A7' },
-    purple: { fill: '#F3E5F5', stroke: '#CE93D8' },
-  };
 
   React.useEffect(() => {
     if (isSelected && trRef.current && groupRef.current) {
@@ -127,11 +128,9 @@ const Frame: React.FC<FrameProps> = ({
     const newWidth = Math.max(minWidth, Math.min(maxWidth, Math.abs(node.width() * scaleX)));
     const newHeight = Math.max(minHeight, Math.min(maxHeight, Math.abs(node.height() * scaleY)));
 
-    onChange?.({
-      size: {
-        width: newWidth,
-        height: newHeight,
-      },
+    onResize?.({
+      width: newWidth,
+      height: newHeight,
     });
   };
 
@@ -166,7 +165,7 @@ const Frame: React.FC<FrameProps> = ({
 
   const handleTitleChange = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     setIsEditing(false);
-    onChange?.({ title: e.target.value });
+    onTitleChange?.(e.target.value);
   };
 
   const handleDimensionChange = (dimension: 'width' | 'height', value: string) => {
@@ -175,11 +174,9 @@ const Frame: React.FC<FrameProps> = ({
     const maxSize = dimension === 'width' ? 1000 : 800;
 
     if (!isNaN(numValue) && numValue >= minSize && numValue <= maxSize) {
-      onChange?.({
-        size: {
-          width: dimension === 'width' ? numValue : width,
-          height: dimension === 'height' ? numValue : height,
-        },
+      onResize?.({
+        width: dimension === 'width' ? numValue : width,
+        height: dimension === 'height' ? numValue : height,
       });
     }
   };
@@ -193,16 +190,13 @@ const Frame: React.FC<FrameProps> = ({
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={(e) => {
-        // Stop event propagation
         e.cancelBubble = true;
         
-        // Only trigger selection if not dragging and not editing dimensions
         if (!isDragging && !isEditingWidth && !isEditingHeight) {
           onSelect?.();
         }
       }}
       onTap={(e) => {
-        // Handle touch events similarly
         e.cancelBubble = true;
         if (!isDragging && !isEditingWidth && !isEditingHeight) {
           onSelect?.();
@@ -215,8 +209,8 @@ const Frame: React.FC<FrameProps> = ({
       <Rect
         width={width}
         height={height}
-        fill={colorMap[color].fill}
-        stroke={isSelected ? "#0096FF" : colorMap[color].stroke}
+        fill={color + '33'}
+        stroke={isSelected ? "#0096FF" : color}
         strokeWidth={isSelected ? 2 : 1}
         cornerRadius={8}
         shadowColor="black"
@@ -224,7 +218,6 @@ const Frame: React.FC<FrameProps> = ({
         shadowOpacity={0.1}
         shadowOffset={{ x: 2, y: 2 }}
         onClick={(e) => {
-          // Prevent click from reaching group
           e.cancelBubble = true;
           if (!isDragging && !isEditingWidth && !isEditingHeight) {
             onSelect?.();
@@ -386,7 +379,7 @@ const Frame: React.FC<FrameProps> = ({
         <Rect
           width={width}
           height={4}
-          fill={colorMap[color].stroke}
+          fill={color}
           opacity={0.8}
           y={0}
         />
@@ -437,7 +430,7 @@ const Frame: React.FC<FrameProps> = ({
               <span style={{ 
                 fontSize: '12px', 
                 color: '#666',
-                background: colorMap[color].stroke,
+                background: color,
                 padding: '2px 6px',
                 borderRadius: '10px',
                 color: '#fff'
@@ -465,7 +458,7 @@ const Frame: React.FC<FrameProps> = ({
               width={20}
               height={20}
               cornerRadius={10}
-              fill={colorMap[color].stroke}
+              fill={color}
             />
           )}
           {notes.filter(note => isNoteInFrame(note, position)).length > 0 && (

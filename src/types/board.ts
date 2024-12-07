@@ -1,7 +1,5 @@
 export type ItemType = 'note' | 'frame' | 'text' | 'connection';
 export type SectionType = 'goals' | 'team' | 'timeline' | 'dependencies' | 'ideas' | 'decisions';
-export type NoteColor = 'yellow' | 'blue' | 'green' | 'pink';
-export type FrameColor = 'gray' | 'blue' | 'green' | 'purple';
 
 export interface Position {
   x: number;
@@ -22,7 +20,7 @@ export interface BoardItem {
 export interface Note extends BoardItem {
   type: 'note';
   content: string;
-  color: NoteColor;
+  color: string;
 }
 
 export interface TextBox extends BoardItem {
@@ -33,7 +31,7 @@ export interface TextBox extends BoardItem {
 export interface Frame extends BoardItem {
   type: 'frame';
   title: string;
-  color: FrameColor;
+  color: string;
   size: Size;
 }
 
