@@ -1,4 +1,4 @@
-export type ItemType = 'note' | 'frame' | 'text' | 'connection';
+export type ItemType = 'note' | 'frame' | 'connection' | 'text';
 export type SectionType = 'goals' | 'team' | 'timeline' | 'dependencies' | 'ideas' | 'decisions';
 
 export interface Position {
@@ -11,35 +11,40 @@ export interface Size {
   height: number;
 }
 
-export interface BoardItem {
+export interface Connection {
   id: string;
-  type: ItemType;
-  position: Position;
+  type: 'connection';
+  startId: string;
+  endId: string;
+  color: string;
+  points: number[];
 }
 
-export interface Note extends BoardItem {
+export interface Note {
+  id: string;
   type: 'note';
-  content: string;
+  position: Position;
+  text: string;
+  size?: Size;
   color: string;
 }
 
-export interface TextBox extends BoardItem {
+export interface Frame {
+  id: string;
+  type: 'frame';
+  position: Position;
+  size: Size;
+  title: string;
+  color: string;
+}
+
+export interface TextBox {
+  id: string;
   type: 'text';
   content: string;
 }
 
-export interface Frame extends BoardItem {
-  type: 'frame';
-  title: string;
-  color: string;
-  size: Size;
-}
-
-export interface Connection extends BoardItem {
-  type: 'connection';
-  fromId: string;
-  toId: string;
-}
+export type BoardItem = Note | Frame | Connection | TextBox;
 
 export interface BoardSection {
   id: string;
@@ -51,18 +56,24 @@ export interface BoardSection {
 
 export interface BoardState {
   sections: BoardSection[];
+  notes: Note[];
+  frames: Frame[];
+  connections: Connection[];
   items: (Note | TextBox | Frame | Connection)[];
+  selectedId: string | null;
+  isConnecting: boolean;
+  connectingStartId: string | null;
+}
+
+export interface BoardAction {
+  type: string;
+  payload: any;
+  timestamp: number;
+  description: string;
 }
 
 export interface BoardHistory {
   past: BoardState[];
   present: BoardState;
   future: BoardState[];
-}
-
-export interface BoardAction {
-  type: string;
-  payload?: any;
-  timestamp: number;
-  description: string;
 }

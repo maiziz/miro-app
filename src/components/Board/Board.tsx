@@ -5,7 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 import Toolbar from './Toolbar';
 import StickyNote from './StickyNote';
 import Frame from './Frame';
-import { Position, Note, Frame as FrameType, BoardState, BoardHistory, BoardAction, NoteColor, FrameColor } from '../../types/board';
+import Connection from './Connection';
+import { Position, Note, Frame as FrameType, BoardState, BoardHistory, BoardAction, NoteColor, FrameColor, Connection as ConnectionType } from '../../types/board';
 
 const MAX_HISTORY_LENGTH = 50;
 
@@ -17,6 +18,7 @@ const Board: React.FC = () => {
     present: {
       notes: [],
       frames: [],
+      connections: [],
       selectedId: null,
     },
     future: [],
@@ -28,6 +30,8 @@ const Board: React.FC = () => {
   const stageRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [selectedColor, setSelectedColor] = useState('#FFD700');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectingStartId, setConnectingStartId] = useState<string | null>(null);
 
   // Shorthand for current board state
   const boardState = boardHistory.present;
@@ -101,6 +105,7 @@ const Board: React.FC = () => {
           ...boardState,
           notes: boardState.notes.filter(note => note.id !== boardState.selectedId),
           frames: boardState.frames.filter(frame => frame.id !== boardState.selectedId),
+          connections: boardState.connections.filter(conn => conn.id !== boardState.selectedId),
           selectedId: null,
         };
 
@@ -117,10 +122,13 @@ const Board: React.FC = () => {
         e.preventDefault();
         const selectedNote = boardState.notes.find(note => note.id === boardState.selectedId);
         const selectedFrame = boardState.frames.find(frame => frame.id === boardState.selectedId);
+        const selectedConnection = boardState.connections.find(conn => conn.id === boardState.selectedId);
         if (selectedNote) {
           localStorage.setItem('clipboard_note', JSON.stringify(selectedNote));
         } else if (selectedFrame) {
           localStorage.setItem('clipboard_frame', JSON.stringify(selectedFrame));
+        } else if (selectedConnection) {
+          localStorage.setItem('clipboard_connection', JSON.stringify(selectedConnection));
         }
       }
 
@@ -129,6 +137,7 @@ const Board: React.FC = () => {
         e.preventDefault();
         const clipboardNote = localStorage.getItem('clipboard_note');
         const clipboardFrame = localStorage.getItem('clipboard_frame');
+        const clipboardConnection = localStorage.getItem('clipboard_connection');
         if (clipboardNote) {
           const note: Note = JSON.parse(clipboardNote);
           const stage = stageRef.current;
@@ -178,6 +187,33 @@ const Board: React.FC = () => {
             payload: newFrame,
             timestamp: Date.now(),
             description: 'Added new frame',
+          });
+        } else if (clipboardConnection) {
+          const connection: ConnectionType = JSON.parse(clipboardConnection);
+          const stage = stageRef.current;
+          const pointerPosition = stage.getPointerPosition();
+          const newConnection: ConnectionType = {
+            ...connection,
+            id: uuidv4(),
+            points: [
+              (pointerPosition.x - stage.x()) / scale,
+              (pointerPosition.y - stage.y()) / scale,
+              (pointerPosition.x - stage.x()) / scale,
+              (pointerPosition.y - stage.y()) / scale,
+            ],
+          };
+
+          const newState = {
+            ...boardState,
+            connections: [...boardState.connections, newConnection],
+            selectedId: newConnection.id,
+          };
+
+          pushHistory(newState, {
+            type: 'ADD_CONNECTION',
+            payload: newConnection,
+            timestamp: Date.now(),
+            description: 'Added new connection',
           });
         }
       }
@@ -258,12 +294,30 @@ const Board: React.FC = () => {
   };
 
   // Add sticky note
-  const addNote = (position: Position) => {
+  const addNote = () => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    // Get the center of the viewport in stage coordinates
+    const viewportCenterX = (window.innerWidth / 2 - position.x) / scale;
+    const viewportCenterY = (window.innerHeight / 2 - position.y) / scale;
+
+    // Default note size
+    const defaultWidth = 200;
+    const defaultHeight = 200;
+
     const note: Note = {
       id: uuidv4(),
       type: 'note',
-      position,
-      text: 'New note',
+      position: {
+        x: viewportCenterX - defaultWidth / 2,
+        y: viewportCenterY - defaultHeight / 2,
+      },
+      text: 'New Note',
+      size: {
+        width: defaultWidth,
+        height: defaultHeight,
+      },
       color: selectedColor,
     };
 
@@ -277,17 +331,34 @@ const Board: React.FC = () => {
       type: 'ADD_NOTE',
       payload: note,
       timestamp: Date.now(),
-      description: 'Added note',
+      description: 'Added new note',
     });
   };
 
   // Add frame
-  const addFrame = (position: Position) => {
+  const addFrame = () => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    // Get the center of the viewport in stage coordinates
+    const viewportCenterX = (window.innerWidth / 2 - position.x) / scale;
+    const viewportCenterY = (window.innerHeight / 2 - position.y) / scale;
+
+    // Default frame size
+    const defaultWidth = 300;
+    const defaultHeight = 300;
+
     const frame: FrameType = {
       id: uuidv4(),
       type: 'frame',
-      position,
-      size: { width: 300, height: 200 },
+      position: {
+        x: viewportCenterX - defaultWidth / 2,
+        y: viewportCenterY - defaultHeight / 2,
+      },
+      size: {
+        width: defaultWidth,
+        height: defaultHeight,
+      },
       title: 'New Frame',
       color: selectedColor,
     };
@@ -302,18 +373,19 @@ const Board: React.FC = () => {
       type: 'ADD_FRAME',
       payload: frame,
       timestamp: Date.now(),
-      description: 'Added frame',
+      description: 'Added new frame',
     });
   };
 
   // Handle note drag
   const handleNoteDragStart = (id: string) => {
     setIsDragging(true);
-    handleNoteSelect(id);
+    handleSelect(id);
   };
 
   const handleNoteDragEnd = (id: string, newPosition: Position) => {
     setIsDragging(false);
+    
     const newState = {
       ...boardState,
       notes: boardState.notes.map(note =>
@@ -321,11 +393,29 @@ const Board: React.FC = () => {
       ),
     };
 
-    pushHistory(newState, {
-      type: 'MOVE_ITEM',
+    // Update connection points after note movement
+    const updatedState = {
+      ...newState,
+      connections: newState.connections.map(conn => {
+        if (conn.startId === id || conn.endId === id) {
+          const startNote = newState.notes.find(note => note.id === conn.startId);
+          const endNote = newState.notes.find(note => note.id === conn.endId);
+          if (startNote && endNote) {
+            return {
+              ...conn,
+              points: calculateConnectionPoints(startNote, endNote),
+            };
+          }
+        }
+        return conn;
+      }),
+    };
+
+    pushHistory(updatedState, {
+      type: 'MOVE_NOTE',
       payload: { id, position: newPosition },
       timestamp: Date.now(),
-      description: 'Moved item',
+      description: 'Moved note',
     });
   };
 
@@ -347,26 +437,28 @@ const Board: React.FC = () => {
   };
 
   // Select note
-  const handleNoteSelect = (id: string) => {
-    if (!isDragging) {
-      const newState = {
-        ...boardState,
-        selectedId: id,
-      };
-
-      pushHistory(newState, {
-        type: 'SELECT_ITEM',
-        payload: id,
-        timestamp: Date.now(),
-        description: 'Selected item',
-      });
+  const handleSelect = (id: string | null) => {
+    if (isConnecting) {
+      if (connectingStartId) {
+        finishConnection(id);
+      } else {
+        startConnection(id);
+      }
+    } else {
+      setBoardHistory(prev => ({
+        ...prev,
+        present: {
+          ...prev.present,
+          selectedId: id,
+        },
+      }));
     }
   };
 
   // Handle frame drag
   const handleFrameDragStart = (id: string) => {
     setIsDragging(true);
-    handleFrameSelect(id);
+    handleSelect(id);
   };
 
   const handleFrameDragEnd = (id: string, newPosition: Position) => {
@@ -408,19 +500,7 @@ const Board: React.FC = () => {
 
   // Select frame
   const handleFrameSelect = (id: string) => {
-    if (!isDragging) {
-      const newState = {
-        ...boardState,
-        selectedId: id,
-      };
-
-      pushHistory(newState, {
-        type: 'SELECT_ITEM',
-        payload: id,
-        timestamp: Date.now(),
-        description: 'Selected item',
-      });
-    }
+    handleSelect(id);
   };
 
   // Handle note movement during frame drag
@@ -462,6 +542,11 @@ const Board: React.FC = () => {
           frame.id === boardState.selectedId
             ? { ...frame, color }
             : frame
+        ),
+        connections: boardState.connections.map(conn =>
+          conn.id === boardState.selectedId
+            ? { ...conn, color }
+            : conn
         ),
       };
 
@@ -508,6 +593,89 @@ const Board: React.FC = () => {
       timestamp: Date.now(),
       description: 'Edited frame title',
     });
+  };
+
+  const startConnection = (noteId: string | null) => {
+    if (!noteId) return;
+    setIsConnecting(true);
+    setConnectingStartId(noteId);
+    setBoardHistory(prev => ({
+      ...prev,
+      present: {
+        ...prev.present,
+        selectedId: noteId,
+      },
+    }));
+  };
+
+  const finishConnection = (endId: string | null) => {
+    if (!endId || !connectingStartId || connectingStartId === endId) {
+      setIsConnecting(false);
+      setConnectingStartId(null);
+      return;
+    }
+
+    const startNote = boardState.notes.find(note => note.id === connectingStartId);
+    const endNote = boardState.notes.find(note => note.id === endId);
+
+    if (startNote && endNote) {
+      const connection: ConnectionType = {
+        id: uuidv4(),
+        type: 'connection',
+        startId: connectingStartId,
+        endId: endId,
+        color: selectedColor,
+        points: calculateConnectionPoints(startNote, endNote),
+      };
+
+      const newState = {
+        ...boardState,
+        connections: [...boardState.connections, connection],
+        selectedId: connection.id,
+      };
+
+      pushHistory(newState, {
+        type: 'ADD_CONNECTION',
+        payload: connection,
+        timestamp: Date.now(),
+        description: 'Added connection',
+      });
+    }
+
+    setIsConnecting(false);
+    setConnectingStartId(null);
+  };
+
+  const calculateConnectionPoints = (startNote: Note, endNote: Note) => {
+    const startX = startNote.position.x + (startNote.size?.width || 150) / 2;
+    const startY = startNote.position.y + (startNote.size?.height || 150) / 2;
+    const endX = endNote.position.x + (endNote.size?.width || 150) / 2;
+    const endY = endNote.position.y + (endNote.size?.height || 150) / 2;
+
+    return [startX, startY, endX, endY];
+  };
+
+  const updateConnectionPoints = () => {
+    const newState = {
+      ...boardState,
+      connections: boardState.connections.map(conn => {
+        const startNote = boardState.notes.find(note => note.id === conn.startId);
+        const endNote = boardState.notes.find(note => note.id === conn.endId);
+
+        if (startNote && endNote) {
+          return {
+            ...conn,
+            points: calculateConnectionPoints(startNote, endNote),
+          };
+        }
+        return conn;
+      }),
+    };
+
+    setBoardHistory(prev => ({
+      ...prev,
+      present: newState,
+    }));
   };
 
   // Grid properties
@@ -562,6 +730,8 @@ const Board: React.FC = () => {
         onRedo={handleRedo}
         selectedColor={selectedColor}
         onColorChange={handleColorChange}
+        isConnecting={isConnecting}
+        onToggleConnect={() => setIsConnecting(!isConnecting)}
       />
       <Stage
         width={stageSize.width}
@@ -597,15 +767,25 @@ const Board: React.FC = () => {
             ))}
           </Group>
 
+          {/* Connections */}
+          {boardState.connections.map((connection) => (
+            <Connection
+              key={connection.id}
+              {...connection}
+              isSelected={boardState.selectedId === connection.id}
+              onSelect={() => handleSelect(connection.id)}
+            />
+          ))}
+
           {/* Frames */}
           {boardState.frames.map((frame) => (
             <Frame
               key={frame.id}
               {...frame}
-              isSelected={frame.id === boardState.selectedId}
+              isSelected={boardState.selectedId === frame.id}
               onSelect={() => handleFrameSelect(frame.id)}
               onDragStart={handleFrameDragStart}
-              onDragEnd={(newPosition) => handleFrameDragEnd(frame.id, newPosition)}
+              onDragEnd={(newPos) => handleFrameDragEnd(frame.id, newPos)}
               onChange={(newAttrs) => handleFrameChange(frame.id, newAttrs)}
               onTitleChange={(title) => handleFrameTitleChange(frame.id, title)}
               notes={boardState.notes}
@@ -614,18 +794,29 @@ const Board: React.FC = () => {
             />
           ))}
 
-          {/* Sticky Notes */}
+          {/* Notes */}
           {boardState.notes.map((note) => (
             <StickyNote
               key={note.id}
               {...note}
-              isSelected={note.id === boardState.selectedId}
-              onSelect={() => handleNoteSelect(note.id)}
+              isSelected={boardState.selectedId === note.id}
+              onSelect={() => {
+                if (isConnecting) {
+                  if (connectingStartId) {
+                    finishConnection(note.id);
+                  } else {
+                    startConnection(note.id);
+                  }
+                } else {
+                  handleSelect(note.id);
+                }
+              }}
               onDragStart={handleNoteDragStart}
-              onDragEnd={(newPosition) => handleNoteDragEnd(note.id, newPosition)}
+              onDragEnd={(newPos) => handleNoteDragEnd(note.id, newPos)}
               onChange={(newAttrs) => handleNoteChange(note.id, newAttrs)}
               onTextChange={(text) => handleNoteTextChange(note.id, text)}
               stageScale={scale}
+              isConnecting={isConnecting && connectingStartId === note.id}
             />
           ))}
         </Layer>

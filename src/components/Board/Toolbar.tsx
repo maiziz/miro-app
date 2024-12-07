@@ -1,53 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { HexColorPicker } from "react-colorful";
-import { Position } from '../../types/board';
-
-interface ColorPickerProps {
-  color: string;
-  onChange: (color: string) => void;
-  onClose: () => void;
-}
-
-const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, onClose }) => {
-  const pickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onClose]);
-
-  return (
-    <div
-      ref={pickerRef}
-      style={{
-        position: 'absolute',
-        zIndex: 2,
-        background: 'white',
-        padding: '8px',
-        borderRadius: '8px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-      }}
-    >
-      <HexColorPicker color={color} onChange={onChange} />
-    </div>
-  );
-};
 
 interface ToolbarProps {
-  onAddNote: (position: Position) => void;
-  onAddFrame: (position: Position) => void;
+  onAddNote: () => void;
+  onAddFrame: () => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
   selectedColor: string;
   onColorChange: (color: string) => void;
+  isConnecting: boolean;
+  onToggleConnect: () => void;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -59,103 +23,88 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onRedo,
   selectedColor,
   onColorChange,
+  isConnecting,
+  onToggleConnect,
 }) => {
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [pickerPosition, setPickerPosition] = useState({ x: 0, y: 0 });
-  const colorButtonRef = useRef<HTMLButtonElement>(null);
-
-  const handleColorButtonClick = () => {
-    if (colorButtonRef.current) {
-      const rect = colorButtonRef.current.getBoundingClientRect();
-      setPickerPosition({
-        x: rect.left,
-        y: rect.bottom + 5,
-      });
-      setShowColorPicker(true);
-    }
-  };
 
   return (
     <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-2 flex items-center space-x-2 z-10">
       <button
-        onClick={() => onAddNote({ x: window.innerWidth / 2 - 75, y: window.innerHeight / 2 - 75 })}
-        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        onClick={onAddNote}
+        className="p-2 hover:bg-gray-100 rounded-lg"
         title="Add Note"
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
-          <path d="M12 8V16M8 12H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
       </button>
 
       <button
-        onClick={() => onAddFrame({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 100 })}
-        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        onClick={onAddFrame}
+        className="p-2 hover:bg-gray-100 rounded-lg"
         title="Add Frame"
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
-          <path d="M8 8H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
         </svg>
       </button>
 
-      <div className="w-px h-6 bg-gray-300" />
-
       <button
-        ref={colorButtonRef}
-        onClick={handleColorButtonClick}
-        className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
-        title="Change Color"
+        onClick={onToggleConnect}
+        className={`p-2 hover:bg-gray-100 rounded-lg ${isConnecting ? 'bg-blue-100' : ''}`}
+        title="Connect Notes"
       >
-        <div
-          className="w-6 h-6 rounded-full border-2 border-gray-300"
-          style={{ backgroundColor: selectedColor }}
-        />
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        </svg>
       </button>
 
-      {showColorPicker && (
-        <div
-          style={{
-            position: 'fixed',
-            left: `${pickerPosition.x}px`,
-            top: `${pickerPosition.y}px`,
-          }}
-        >
-          <ColorPicker
-            color={selectedColor}
-            onChange={onColorChange}
-            onClose={() => setShowColorPicker(false)}
-          />
-        </div>
-      )}
-
-      <div className="w-px h-6 bg-gray-300" />
+      <div className="h-6 w-px bg-gray-300" />
 
       <button
         onClick={onUndo}
         disabled={!canUndo}
-        className={`p-2 rounded-lg transition-colors ${
-          canUndo ? 'hover:bg-gray-100' : 'opacity-50 cursor-not-allowed'
-        }`}
+        className={`p-2 rounded-lg ${canUndo ? 'hover:bg-gray-100' : 'opacity-50 cursor-not-allowed'}`}
         title="Undo"
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M7 9L4 12M4 12L7 15M4 12H16C18.2091 12 20 13.7909 20 16V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
         </svg>
       </button>
 
       <button
         onClick={onRedo}
         disabled={!canRedo}
-        className={`p-2 rounded-lg transition-colors ${
-          canRedo ? 'hover:bg-gray-100' : 'opacity-50 cursor-not-allowed'
-        }`}
+        className={`p-2 rounded-lg ${canRedo ? 'hover:bg-gray-100' : 'opacity-50 cursor-not-allowed'}`}
         title="Redo"
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M17 9L20 12M20 12L17 15M20 12H8C5.79086 12 4 13.7909 4 16V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
         </svg>
       </button>
+
+      <div className="h-6 w-px bg-gray-300" />
+
+      <div className="relative">
+        <button
+          onClick={() => setShowColorPicker(!showColorPicker)}
+          className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400"
+          style={{ backgroundColor: selectedColor }}
+          title="Color Picker"
+        />
+        {showColorPicker && (
+          <div 
+            className="absolute top-full left-0 mt-2 p-2 bg-white rounded-lg shadow-lg z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <HexColorPicker 
+              color={selectedColor} 
+              onChange={onColorChange}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

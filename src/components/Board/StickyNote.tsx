@@ -3,42 +3,38 @@ import { Group, Rect, Text, Transformer } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import { Position, Size } from '../../types/board';
 
-interface StickyNoteProps {
-  id: string;
-  position: Position;
-  text: string;
-  isSelected?: boolean;
-  onSelect?: () => void;
-  onDragStart?: () => void;
-  onDragEnd?: (position: Position) => void;
-  onTextChange?: (text: string) => void;
-  size?: Size;
+interface StickyNoteProps extends Note {
+  isSelected: boolean;
+  onSelect: () => void;
+  onDragStart: () => void;
+  onDragEnd: (position: Position) => void;
+  onTextChange: (text: string) => void;
   onResize?: (size: Size) => void;
-  color: string;
   isInFrame?: boolean;
+  isConnecting?: boolean;
 }
 
 const StickyNote: React.FC<StickyNoteProps> = ({
   id,
   position,
   text,
-  isSelected = false,
+  color,
+  size,
+  isSelected,
   onSelect,
   onDragStart,
   onDragEnd,
   onTextChange,
-  size,
   onResize,
-  color = '#FFD700',
-  isInFrame = false,
+  isInFrame,
+  isConnecting,
 }) => {
-  const [isDragging, setIsDragging] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const shapeRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const groupRef = useRef(null);
   const trRef = useRef(null);
-
-  const width = 150;
-  const height = 150;
+  const width = size?.width || 200;
+  const height = size?.height || 200;
 
   // Function to determine text color based on background color
   const getContrastTextColor = (bgColor: string) => {
@@ -59,216 +55,103 @@ const StickyNote: React.FC<StickyNoteProps> = ({
 
   const textColor = getContrastTextColor(color);
 
-  React.useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
-      trRef.current.nodes([shapeRef.current]);
-      trRef.current.getLayer().batchDraw();
-    }
-  }, [isSelected]);
-
-  const handleDragStart = () => {
-    setIsDragging(true);
-    onDragStart?.();
-  };
-
-  const handleDragEnd = (e: any) => {
-    setIsDragging(false);
-    const newPosition = {
-      x: e.target.x(),
-      y: e.target.y(),
-    };
-    onDragEnd?.(newPosition);
-  };
-
-  const handleTextareaBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value.trim();
-    if (newText !== text) {
-      onTextChange?.(newText);
-    }
-    setIsEditing(false);
-  };
-
-  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const target = e.target as HTMLTextAreaElement;
-      const newText = target.value.trim();
-      if (newText !== text) {
-        onTextChange?.(newText);
-      }
-      setIsEditing(false);
-    }
-    if (e.key === 'Escape') {
-      setIsEditing(false);
-    }
-  };
-
-  const handleTransform = () => {
-    const node = shapeRef.current;
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
-    const rotation = node.rotation();
-
-    // Reset scale and update width/height
-    node.scaleX(1);
-    node.scaleY(1);
-    
-    const minWidth = 100;
-    const minHeight = 100;
-    const maxWidth = 500;
-    const maxHeight = 500;
-
-    const newWidth = Math.max(minWidth, Math.min(maxWidth, Math.abs(node.width() * scaleX)));
-    const newHeight = Math.max(minHeight, Math.min(maxHeight, Math.abs(node.height() * scaleY)));
-
-    onResize?.({
-      width: newWidth,
-      height: newHeight,
-    });
-  };
-
   return (
     <Group
       x={position.x}
       y={position.y}
       draggable
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
+      onDragStart={(e) => {
+        e.cancelBubble = true;
+        setIsDragging(true);
+        onDragStart();
+      }}
+      onDragEnd={(e) => {
+        setIsDragging(false);
+        onDragEnd({
+          x: e.target.x(),
+          y: e.target.y(),
+        });
+      }}
       onClick={(e) => {
         e.cancelBubble = true;
-        if (!isDragging && !isEditing) {
-          onSelect?.();
+        if (!isDragging) {
+          onSelect();
         }
       }}
-      onDblClick={() => {
-        if (!isEditing) {
-          setIsEditing(true);
-        }
-      }}
-      ref={shapeRef}
-      onTransformEnd={handleTransform}
+      ref={groupRef}
     >
       <Rect
-        width={size?.width || width}
-        height={size?.height || height}
+        width={width}
+        height={height}
         fill={color}
+        cornerRadius={8}
         shadowColor="black"
         shadowBlur={isDragging ? 10 : 5}
-        shadowOpacity={0.2}
+        shadowOpacity={0.1}
         shadowOffset={{ x: 2, y: 2 }}
-        cornerRadius={5}
-        stroke={isSelected ? "#0096FF" : undefined}
-        strokeWidth={isSelected ? 2 : 0}
-        onClick={(e) => {
-          e.cancelBubble = true;
-          if (!isDragging && !isEditing) {
-            onSelect?.();
-          }
-        }}
+        stroke={isSelected || isConnecting ? "#0096FF" : "transparent"}
+        strokeWidth={isConnecting ? 3 : 2}
       />
-
-      {/* Top bar indicator for when note is in a frame */}
-      {isInFrame && (
-        <Rect
-          width={size?.width || width}
-          height={4}
-          fill={color}
-          opacity={0.8}
-          y={0}
-        />
-      )}
       {isEditing ? (
         <Html>
           <div
             style={{
               position: 'absolute',
-              top: '0px',
-              left: '0px',
-              width: '100%',
-              height: '100%',
+              top: '10px',
+              left: '10px',
+              width: `${width - 20}px`,
+              height: `${height - 20}px`,
             }}
           >
-            <div
+            <textarea
+              autoFocus
+              defaultValue={text}
               style={{
-                position: 'absolute',
-                top: '10px',
-                left: '10px',
-                width: `${(size?.width || width) - 20}px`,
-                height: `${(size?.height || height) - 20}px`,
-                transform: `scale(${1 / 1})`,
-                transformOrigin: 'top left',
+                width: '100%',
+                height: '100%',
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                fontSize: '16px',
+                fontFamily: 'Arial',
+                color: textColor,
+                padding: '0px',
               }}
-            >
-              <textarea
-                autoFocus
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  border: 'none',
-                  padding: '0px',
-                  margin: '0px',
-                  background: color,
-                  color: textColor,
-                  outline: 'none',
-                  resize: 'none',
-                  fontSize: '16px',
-                  fontFamily: 'Arial',
-                  lineHeight: '1.4',
-                  overflow: 'hidden',
-                }}
-                defaultValue={text}
-                onKeyDown={handleTextareaKeyDown}
-                onBlur={handleTextareaBlur}
-              />
-            </div>
+              onBlur={(e) => {
+                setIsEditing(false);
+                onTextChange(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  setIsEditing(false);
+                  onTextChange(e.currentTarget.value);
+                }
+                if (e.key === 'Escape') {
+                  setIsEditing(false);
+                }
+              }}
+            />
           </div>
         </Html>
       ) : (
         <Text
           text={text}
-          width={(size?.width || width) - 20}
-          height={(size?.height || height) - 20}
+          width={width - 20}
+          height={height - 20}
           x={10}
           y={10}
           fontSize={16}
           fontFamily="Arial"
           fill={textColor}
-          wrap="word"
-          align="left"
-          onDblClick={() => {
-            if (!isEditing) {
-              setIsEditing(true);
+          onDblClick={() => setIsEditing(true)}
+          onClick={(e) => {
+            e.cancelBubble = true;
+            if (!isDragging) {
+              onSelect();
             }
           }}
-        />
-      )}
-      {isSelected && !isEditing && (
-        <Transformer
-          ref={trRef}
-          boundBoxFunc={(oldBox, newBox) => {
-            const minWidth = 100;
-            const minHeight = 100;
-            const maxWidth = 500;
-            const maxHeight = 500;
-            
-            const isWidthValid = newBox.width >= minWidth && newBox.width <= maxWidth;
-            const isHeightValid = newBox.height >= minHeight && newBox.height <= maxHeight;
-            
-            return {
-              ...newBox,
-              width: isWidthValid ? newBox.width : oldBox.width,
-              height: isHeightValid ? newBox.height : oldBox.height,
-            };
-          }}
-          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-          rotateEnabled={false}
-          flipEnabled={true}
-          borderStroke="#0096FF"
-          borderStrokeWidth={2}
-          anchorFill="#0096FF"
-          anchorStroke="#fff"
-          anchorSize={8}
-          anchorCornerRadius={2}
         />
       )}
     </Group>
