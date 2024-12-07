@@ -156,17 +156,12 @@ const Frame: React.FC<FrameProps> = ({
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      onClick={() => !isDragging && onSelect?.()}
+      onClick={(e) => {
+        e.cancelBubble = true; // Prevent click from bubbling to stage
+        if (!isDragging) onSelect?.();
+      }}
       ref={groupRef}
       onTransformEnd={handleTransform}
-      onMouseEnter={() => setShowDimensions(true)}
-      onMouseLeave={() => {
-        if (!isSelected) {
-          setShowDimensions(false);
-          setIsEditingWidth(false);
-          setIsEditingHeight(false);
-        }
-      }}
     >
       {/* Frame background */}
       <Rect
@@ -183,7 +178,7 @@ const Frame: React.FC<FrameProps> = ({
       />
 
       {/* Size dimensions */}
-      {(showDimensions || isSelected) && (
+      {isSelected && (
         <>
           {/* Width dimension */}
           <Group y={height + 10}>

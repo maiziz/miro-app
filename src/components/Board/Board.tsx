@@ -318,6 +318,17 @@ const Board: React.FC = () => {
     }));
   };
 
+  const handleDeselect = (e: KonvaEventObject<MouseEvent>) => {
+    // Only deselect if clicking on the stage background
+    const clickedOnStage = e.target === e.target.getStage();
+    if (clickedOnStage) {
+      setBoardState(prev => ({
+        ...prev,
+        selectedId: null
+      }));
+    }
+  };
+
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#F5F5F5' }}>
       <Toolbar onAddNote={addNote} onAddFrame={addFrame} />
@@ -325,20 +336,14 @@ const Board: React.FC = () => {
         width={stageSize.width}
         height={stageSize.height}
         ref={stageRef}
-        onWheel={handleWheel}
         draggable
         onDragStart={handleStageDragStart}
         onDragEnd={handleStageDragEnd}
-        scale={{ x: scale, y: scale }}
         x={position.x}
         y={position.y}
-        onClick={(e) => {
-          // Deselect when clicking on empty area
-          const clickedOnEmpty = e.target === e.target.getStage();
-          if (clickedOnEmpty && !isDragging) {
-            setBoardState(prev => ({ ...prev, selectedId: null }));
-          }
-        }}
+        scale={{ x: scale, y: scale }}
+        onWheel={handleWheel}
+        onClick={handleDeselect}
       >
         <Layer>
           {/* Background */}
