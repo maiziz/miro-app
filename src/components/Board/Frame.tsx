@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Group, Rect, Text, Transformer } from 'react-konva';
 import { Html } from 'react-konva-utils';
-import { Frame as FrameType, Position } from '../../types/board';
+import { Frame as FrameType, Position, Note } from '../../types/board';
 
 interface FrameProps extends FrameType {
   isSelected?: boolean;
@@ -10,22 +10,27 @@ interface FrameProps extends FrameType {
   onDragStart?: () => void;
   onDragEnd?: (position: Position) => void;
   stageScale: number;
+  notes?: Note[];
+  onNotesMove?: (noteIds: string[], offset: Position) => void;
 }
 
 const Frame: React.FC<FrameProps> = ({
   title,
   position,
-  color,
   size,
+  color,
   isSelected = false,
   onSelect,
   onChange,
   onDragStart,
   onDragEnd,
   stageScale,
+  notes = [],
+  onNotesMove,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [startPos, setStartPos] = useState<Position | null>(null);
   const groupRef = useRef(null);
   const trRef = useRef(null);
 
@@ -46,8 +51,9 @@ const Frame: React.FC<FrameProps> = ({
     }
   }, [isSelected]);
 
-  const handleDragStart = () => {
+  const handleDragStart = (e: any) => {
     setIsDragging(true);
+    setStartPos({ x: e.target.x(), y: e.target.y() });
     onDragStart?.();
   };
 
@@ -57,7 +63,36 @@ const Frame: React.FC<FrameProps> = ({
       x: e.target.x(),
       y: e.target.y(),
     };
+
+    if (startPos) {
+      const offset = {
+        x: newPosition.x - startPos.x,
+        y: newPosition.y - startPos.y,
+      };
+
+      // Get notes that are inside the frame
+      const containedNotes = notes.filter(note => isNoteInFrame(note, startPos));
+      if (containedNotes.length > 0) {
+        onNotesMove?.(containedNotes.map(note => note.id), offset);
+      }
+    }
+
     onDragEnd?.(newPosition);
+    setStartPos(null);
+  };
+
+  const isNoteInFrame = (note: Note, framePos: Position) => {
+    const frameRight = framePos.x + width;
+    const frameBottom = framePos.y + height;
+    const noteRight = note.position.x + (note.size?.width || 150);
+    const noteBottom = note.position.y + (note.size?.height || 150);
+
+    return (
+      note.position.x >= framePos.x &&
+      note.position.y >= framePos.y &&
+      noteRight <= frameRight &&
+      noteBottom <= frameBottom
+    );
   };
 
   const handleTransform = () => {

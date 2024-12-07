@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Stage, Layer, Rect } from 'react-konva';
+import { Stage, Layer, Rect, Group, Line } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { v4 as uuidv4 } from 'uuid';
 import Toolbar from './Toolbar';
@@ -289,6 +289,35 @@ const Board: React.FC = () => {
   const numHorizontalLines = Math.ceil(stageSize.height / gridSize);
   const numVerticalLines = Math.ceil(stageSize.width / gridSize);
 
+  const gridLines = Array.from({ length: numHorizontalLines + numVerticalLines }).map((_, i) => {
+    if (i < numHorizontalLines) {
+      return {
+        points: [0, i * gridSize, stageSize.width, i * gridSize],
+      };
+    } else {
+      return {
+        points: [((i - numHorizontalLines) * gridSize), 0, ((i - numHorizontalLines) * gridSize), stageSize.height],
+      };
+    }
+  });
+
+  const handleNotesMove = (noteIds: string[], offset: Position) => {
+    setBoardState(prev => ({
+      ...prev,
+      notes: prev.notes.map(note => 
+        noteIds.includes(note.id)
+          ? {
+              ...note,
+              position: {
+                x: note.position.x + offset.x,
+                y: note.position.y + offset.y,
+              },
+            }
+          : note
+      ),
+    }));
+  };
+
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#F5F5F5' }}>
       <Toolbar onAddNote={addNote} onAddFrame={addFrame} />
@@ -319,31 +348,18 @@ const Board: React.FC = () => {
             fill="#ffffff"
           />
           
-          {/* Grid - Vertical lines */}
-          {Array.from({ length: numVerticalLines }).map((_, i) => (
-            <Rect
-              key={`v-${i}`}
-              x={i * gridSize}
-              y={0}
-              width={1}
-              height={stageSize.height}
-              fill={gridColor}
-              opacity={gridOpacity}
-            />
-          ))}
-          
-          {/* Grid - Horizontal lines */}
-          {Array.from({ length: numHorizontalLines }).map((_, i) => (
-            <Rect
-              key={`h-${i}`}
-              x={0}
-              y={i * gridSize}
-              width={stageSize.width}
-              height={1}
-              fill={gridColor}
-              opacity={gridOpacity}
-            />
-          ))}
+          {/* Grid */}
+          <Group>
+            {gridLines.map((line, i) => (
+              <Line
+                key={i}
+                points={line.points}
+                stroke={gridColor}
+                strokeWidth={1}
+                opacity={gridOpacity}
+              />
+            ))}
+          </Group>
 
           {/* Frames */}
           {boardState.frames?.map((frame) => (
@@ -356,6 +372,8 @@ const Board: React.FC = () => {
               onDragEnd={(newPosition) => handleFrameDragEnd(frame.id, newPosition)}
               onChange={(newAttrs) => handleFrameChange(frame.id, newAttrs)}
               stageScale={scale}
+              notes={boardState.notes}
+              onNotesMove={handleNotesMove}
             />
           ))}
 
